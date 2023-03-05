@@ -1,0 +1,5 @@
+Django
+django-crontab
+requests
+lxml
+retrying
