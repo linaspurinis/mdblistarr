@@ -1,0 +1,118 @@
+{% extends "layout.html" %}
+
+{% block body %}
+<div class="container">
+</br>
+
+    <form action="{% url 'home_view' %}" method="post">
+        {% csrf_token %}
+        <div class="form-group">
+        {% if form.non_field_errors.0 %}
+            <div class="alert alert-warning" role="alert">
+                {{ form.non_field_errors.0 }}
+            </div>        
+        {% endif %}
+        <p></p>
+        <h3>
+            MDBList
+            <small class="text-muted">Configuration Options</small>
+        </h3>        
+        <div class="fieldWrapper">
+            {{ form.mdblist_apikey.label_tag }}
+            {{ form.mdblist_apikey }}
+            <div  class="invalid-feedback">
+                {{form.mdblist_apikey.errors.0}}
+            </div>
+            <div  class="valid-feedback">
+                {{ form.mdblist_apikey.help_text }}
+            </div>
+        </div>
+        <p></p>
+        <h3>
+            Radarr
+            <small class="text-muted">Configuration Options</small>
+        </h3>
+        <div class="fieldWrapper">
+            {{ form.radarr_apikey.label_tag }}
+            {{ form.radarr_apikey }}
+            <div  class="invalid-feedback">
+                {{form.radarr_apikey.errors.0}}
+            </div>
+            <div  class="valid-feedback">
+                {{form.radarr_apikey.help_text}}
+            </div>
+        </div>
+        <div class="fieldWrapper">
+            {{ form.radarr_url.errors }}
+            {{ form.radarr_url.label_tag }}
+            {{ form.radarr_url }}
+        </div>
+        <div class="fieldWrapper">
+            {{ form.radarr_quality_profile.label_tag }}
+            {{ form.radarr_quality_profile }}
+            <div  class="invalid-feedback">
+                {{form.radarr_quality_profile.errors.0}}
+            </div>
+            <div  class="valid-feedback">
+                {{form.radarr_quality_profile.help_text}}
+            </div>
+        </div>
+        <div class="fieldWrapper">
+            {{ form.radarr_root_folder.label_tag }}
+            {{ form.radarr_root_folder }}
+            <div  class="invalid-feedback">
+                {{form.radarr_root_folder.errors.0}}
+            </div>
+            <div  class="valid-feedback">
+                {{form.radarr_root_folder.help_text}}
+            </div>
+        </div>
+        <p></p>
+        <h3>
+            Sonarr
+            <small class="text-muted">Configuration Options</small>
+        </h3>        
+        <div class="fieldWrapper">
+            {{ form.sonarr_apikey.label_tag }}
+            {{ form.sonarr_apikey }}
+            <div  class="invalid-feedback">
+                {{form.sonarr_apikey.errors.0}}
+            </div>
+            <div  class="valid-feedback">
+                {{form.sonarr_apikey.help_text}}
+            </div>
+        </div>
+        <div class="fieldWrapper">
+            {{ form.sonarr_url.label_tag }}
+            {{ form.sonarr_url }}
+        </div>
+        <div class="fieldWrapper">
+            {{ form.sonarr_quality_profile.label_tag }}
+            {{ form.sonarr_quality_profile }}
+            <div  class="invalid-feedback">
+                {{form.sonarr_quality_profile.errors.0}}
+            </div>
+            <div  class="valid-feedback">
+                {{form.sonarr_quality_profile.help_text}}
+            </div>
+        </div>
+    <div class="fieldWrapper">
+            {{ form.sonarr_root_folder.label_tag }}
+            {{ form.sonarr_root_folder }}
+            <div  class="invalid-feedback">
+                {{form.sonarr_root_folder.errors.0}}
+            </div>
+            <div  class="valid-feedback">
+                {{form.sonarr_root_folder.help_text}}
+            </div>
+        </div>
+
+    </div></br>
+    <div class="d-grid gap-2 d-md-flex">
+        <input class="btn btn-success" type="submit" value="Save Configuration">
+    </div>
+    </form>
+
+</div>
+
+{% endblock %}

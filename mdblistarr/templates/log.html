@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+
+{% block body %}
+
+<div class="container">
+</br>
+
+<table class="table table-striped table-sm" style="font-family:monospace; font-size: small;">
+    <thead>
+      <tr>
+        <th scope="col">Type</th>
+        <th scope="col">Status</th>
+        <th scope="col">Date</th>
+        <th scope="col">Log</th>
+      </tr>
+    </thead>
+    <tbody>
+
+    {% for log in logs %}
+      <tr>
+        <th scope="row">{% if log.provider == 1 %}Radarr{% elif log.provider == 2 %}Sonarr{% else %}{{ log.provider }}{% endif %}</td>
+        <th {% if log.status == 1 %}class="badge text-bg-success"{% elif log.status == 2 %}class="badge text-bg-warning"{% endif %}>{% if log.status == 1 %}Success{% elif log.status == 2 %}Warning{% endif %}</th>
+        <td nowrap="nowrap">{{ log.date|date:"Y-m-d H:i:s" }}</th>
+        <td>{{log.text}}</td>
+      </tr>
+    {% endfor %}
+
+    </tbody>
+  </table>
+
+</div>
+
+{% endblock %}
