@@ -126,7 +126,7 @@ def get_mdblist_queue_to_arr():
                     if res[0].get('errorMessage'):
                         save_log(provider, 2, f"Error adding show to Sonarr: {item['title']}. {res[0]['errorMessage']}")
                 elif res.get('title'):
-                    save_log(provider, 1, f"Added movie to Sonarr {item['title']}.")
+                    save_log(provider, 1, f"Added show to Sonarr {item['title']}.")
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
         return JsonResponse({'result': 500})

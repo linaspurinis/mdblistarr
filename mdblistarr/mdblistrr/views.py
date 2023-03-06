@@ -137,9 +137,8 @@ class UserInfoForm(forms.Form):
             radarr = RadarrAPI(radarr_url, radarr_apikey)
             radarr_status = radarr.get_status()
             if radarr_status['status'] == 1:
-                self.fields['radarr_apikey'].widget.attrs.update({'class': 'form-control is-valid'})
-                self.fields['radarr_apikey'].help_text = f"{radarr_status['json']['instanceName']} {radarr_status['json']['version']}"
                 mdblistarr.radarr = radarr
+                self.fields['radarr_apikey'].widget.attrs.update({'class': 'form-control is-valid'})
 
                 if self.cleaned_data['radarr_quality_profile'] == '' or self.cleaned_data['radarr_quality_profile'] == '0':
                     self._errors['radarr_quality_profile'] = self.error_class(['Select profile'])
@@ -164,9 +163,8 @@ class UserInfoForm(forms.Form):
             sonarr = SonarrAPI(sonarr_url, sonarr_apikey)
             sonarr_status = sonarr.get_status()
             if sonarr_status['status'] == 1:
-                self.fields['sonarr_apikey'].widget.attrs.update({'class': 'form-control is-valid'})
-                self.fields['sonarr_apikey'].help_text = f"{sonarr_status['json']['instanceName']} {sonarr_status['json']['version']}"
                 mdblistarr.sonarr = sonarr
+                self.fields['sonarr_apikey'].widget.attrs.update({'class': 'form-control is-valid'})
     
                 if self.cleaned_data['sonarr_quality_profile'] == '' or self.cleaned_data['sonarr_quality_profile'] == '0':
                     self._errors['sonarr_quality_profile'] = self.error_class(['Select profile'])
@@ -196,23 +194,30 @@ class UserInfoForm(forms.Form):
             self.fields['radarr_root_folder'].disabled = False
             self.fields['radarr_quality_profile'].choices = mdblistarr.get_radarr_quality_profile_choices()
             self.fields['radarr_root_folder'].choices = mdblistarr.get_radarr_root_folder_choices()
+            radarr_status = mdblistarr.radarr.get_status()
+            if radarr_status['status'] == 1:
+                self.fields['radarr_apikey'].help_text = f"{radarr_status['json']['instanceName']} {radarr_status['json']['version']}"
         else:
             self.fields['radarr_quality_profile'].disabled = True
             self.fields['radarr_root_folder'].disabled = True
+
         if mdblistarr.sonarr:
             self.fields['sonarr_quality_profile'].disabled = False
             self.fields['sonarr_root_folder'].disabled = False
             self.fields['sonarr_quality_profile'].choices = mdblistarr.get_sonarr_quality_profile_choices()
             self.fields['sonarr_root_folder'].choices = mdblistarr.get_sonarr_root_folder_choices()
+            sonarr_status = mdblistarr.sonarr.get_status()
+            if sonarr_status['status'] == 1:
+                self.fields['sonarr_apikey'].help_text = f"{sonarr_status['json']['instanceName']} {sonarr_status['json']['version']}"
         else:
             self.fields['sonarr_quality_profile'].disabled = True
             self.fields['sonarr_root_folder'].disabled = True
 
 
     radarr_quality_profile = forms.ChoiceField(label='Select Quality Profile', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_radarr_quality_profile_choices())
-    radarr_root_folder = forms.ChoiceField(label='Select Quality Profile', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_radarr_root_folder_choices())
+    radarr_root_folder = forms.ChoiceField(label='Select Root Folder', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_radarr_root_folder_choices())
     sonarr_quality_profile = forms.ChoiceField(label='Select Quality Profile', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_sonarr_quality_profile_choices())
-    sonarr_root_folder = forms.ChoiceField(label='Select Quality Profile', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_sonarr_root_folder_choices())
+    sonarr_root_folder = forms.ChoiceField(label='Select Root Folder', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_sonarr_root_folder_choices())
 
     mdblist_apikey = forms.CharField(label='MDBList API Key', widget=forms.TextInput(attrs={'placeholder': 'Enter your mdblist.com API key', 'class': 'form-control'}))
     radarr_apikey = forms.CharField(label='Radarr API Key', required=False, widget=forms.TextInput(attrs={'placeholder': 'Enter your Radarr API key', 'class': 'form-control'}))
