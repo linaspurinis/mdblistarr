@@ -9,7 +9,6 @@ RUN pip install -r requirements.txt
 RUN apt-get update
 RUN apt-get -y install cron
 RUN touch /var/log/cron.log
-#COPY . .
 ENV PORT 5353
 COPY ./django-entrypoint.sh /
 RUN chmod +x /django-entrypoint.sh
