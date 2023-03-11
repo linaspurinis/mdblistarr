@@ -7,10 +7,6 @@ import traceback
 from .models import Log
 from .views import MDBListarr
 
-def my_scheduled_job():
-    print('crontab running')
-    pass
-
 def save_log(provider, status, text):
     log = Log()
     log.date = timezone.now()
@@ -109,8 +105,12 @@ def get_mdblist_queue_to_arr():
                 if isinstance(res, list):
                     if res[0].get('errorMessage'):
                         save_log(provider, 2, f"Error adding movie to Radarr: {item['title']}. {res[0]['errorMessage']}.")
+                    else:
+                        save_log(provider, 2, f"Error: {res}")
                 elif res.get('title'):
                     save_log(provider, 1, f"Added movie to Radarr: {item['title']}.")
+                else:
+                    save_log(provider, 2, f"Error: {res}")
             elif item['mediatype'] == 'show':
                 provider = 2
                 show_request_json = {
@@ -125,8 +125,12 @@ def get_mdblist_queue_to_arr():
                 if isinstance(res, list):
                     if res[0].get('errorMessage'):
                         save_log(provider, 2, f"Error adding show to Sonarr: {item['title']}. {res[0]['errorMessage']}")
+                    else:
+                        save_log(provider, 2, f"Error: {res}")
                 elif res.get('title'):
                     save_log(provider, 1, f"Added show to Sonarr {item['title']}.")
+                else:
+                    save_log(provider, 2, f"Error: {res}")
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
         return JsonResponse({'result': 500})
