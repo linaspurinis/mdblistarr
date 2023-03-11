@@ -36,44 +36,44 @@ class MDBListarr():
 
     def _get_config(self):
         pref = Preferences.objects.filter(name='mdblist_apikey').first()
-        if pref: 
+        if pref is not None: 
             self.mdblist_apikey = pref.value
 
         pref = Preferences.objects.filter(name='radarr_apikey').first()
-        if pref:
+        if pref is not None:
             self.radarr_apikey = pref.value
 
         pref = Preferences.objects.filter(name='radarr_url').first()
-        if pref:
+        if pref is not None:
             self.radarr_url = pref.value
 
         pref = Preferences.objects.filter(name='radarr_quality_profile').first()
-        if pref:
+        if pref is not None:
             self.radarr_quality_profile = pref.value
 
         pref = Preferences.objects.filter(name='radarr_root_folder').first()
-        if pref:
+        if pref is not None:
             self.radarr_root_folder = pref.value
 
         pref = Preferences.objects.filter(name='sonarr_apikey').first()
-        if pref:
+        if pref is not None:
             self.sonarr_apikey = pref.value
             
         pref = Preferences.objects.filter(name='sonarr_url').first()
-        if pref:
+        if pref is not None:
             self.sonarr_url = pref.value
 
         pref = Preferences.objects.filter(name='sonarr_quality_profile').first()
-        if pref:
+        if pref is not None:
             self.sonarr_quality_profile = pref.value
 
         pref = Preferences.objects.filter(name='sonarr_root_folder').first()
-        if pref:
+        if pref is not None:
             self.sonarr_root_folder = pref.value
 
     def get_radarr_quality_profile_choices(self):
         choices_list = []
-        if self.radarr:
+        if self.radarr is not None:
             quality_profiles = self.radarr.get_quality_profile()
             choices_list = [('0', 'Select Default Quality Profile')]
             for profile in quality_profiles:
@@ -82,7 +82,7 @@ class MDBListarr():
 
     def get_radarr_root_folder_choices(self):
         choices_list = []
-        if self.radarr:
+        if self.radarr is not None:
             quality_profiles = self.radarr.get_root_folder()
             choices_list = [('0', 'Select Default Root Folder')]
             for profile in quality_profiles:
@@ -91,7 +91,7 @@ class MDBListarr():
 
     def get_sonarr_quality_profile_choices(self):
         choices_list = []
-        if self.sonarr:
+        if self.sonarr is not None:
             quality_profiles = self.sonarr.get_quality_profile()
             choices_list = [('0', 'Select Default Quality Profile')]
             for profile in quality_profiles:
@@ -100,7 +100,7 @@ class MDBListarr():
 
     def get_sonarr_root_folder_choices(self):
         choices_list = []
-        if self.sonarr:
+        if self.sonarr is not None:
             quality_profiles = self.sonarr.get_root_folder()
             choices_list = [('0', 'Select Default Root Folder')]
             for profile in quality_profiles:
@@ -189,7 +189,7 @@ class UserInfoForm(forms.Form):
         return self.cleaned_data
 
     def update_drop_fields(self):
-        if mdblistarr.radarr:
+        if mdblistarr.radarr is not None:
             self.fields['radarr_quality_profile'].disabled = False
             self.fields['radarr_root_folder'].disabled = False
             self.fields['radarr_quality_profile'].choices = mdblistarr.get_radarr_quality_profile_choices()
@@ -201,7 +201,7 @@ class UserInfoForm(forms.Form):
             self.fields['radarr_quality_profile'].disabled = True
             self.fields['radarr_root_folder'].disabled = True
 
-        if mdblistarr.sonarr:
+        if mdblistarr.sonarr is not None:
             self.fields['sonarr_quality_profile'].disabled = False
             self.fields['sonarr_root_folder'].disabled = False
             self.fields['sonarr_quality_profile'].choices = mdblistarr.get_sonarr_quality_profile_choices()
