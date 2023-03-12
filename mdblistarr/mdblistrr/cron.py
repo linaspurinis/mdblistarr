@@ -106,11 +106,11 @@ def get_mdblist_queue_to_arr():
                     if res[0].get('errorMessage'):
                         save_log(provider, 2, f"Error adding movie to Radarr: {item['title']}. {res[0]['errorMessage']}.")
                     else:
-                        save_log(provider, 2, f"Error: {res}")
+                        save_log(provider, 2, f"Error posting movie to Radarr")
                 elif res.get('title'):
                     save_log(provider, 1, f"Added movie to Radarr: {item['title']}.")
                 else:
-                    save_log(provider, 2, f"Error: {res}")
+                    save_log(provider, 2, f"Error posting movie to Radarr")
             elif item['mediatype'] == 'show':
                 provider = 2
                 show_request_json = {
@@ -126,11 +126,11 @@ def get_mdblist_queue_to_arr():
                     if res[0].get('errorMessage'):
                         save_log(provider, 2, f"Error adding show to Sonarr: {item['title']}. {res[0]['errorMessage']}")
                     else:
-                        save_log(provider, 2, f"Error: {res}")
+                        save_log(provider, 2, f"Error posting show to Sonarr")
                 elif res.get('title'):
                     save_log(provider, 1, f"Added show to Sonarr {item['title']}.")
                 else:
-                    save_log(provider, 2, f"Error: {res}")
+                    save_log(provider, 2, f"Error posting show to Sonarr")
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
         return JsonResponse({'result': 500})
