@@ -23,3 +23,14 @@ class Log(models.Model):
 
     def __str__(self):
         return self.text
+
+class RadarrDestinations(models.Model):
+    id = models.AutoField(primary_key=True)
+    genre = models.CharField(max_length=255)
+    root_folder = models.CharField(max_length=255)
+
+    class Meta:
+      verbose_name_plural = "radarr_destinations"
+
+    def __str__(self):
+        return self.genre        

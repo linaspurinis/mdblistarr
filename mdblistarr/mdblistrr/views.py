@@ -3,13 +3,15 @@ from django.views.generic import ListView
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django import forms
-from .models import Preferences
+from .models import Preferences, RadarrDestinations
 from .connect import Connect
 from .arr import SonarrAPI
 from .arr import RadarrAPI
 from .arr import MdblistAPI
 from django.core.exceptions import ValidationError
 import traceback
+from django.forms import (formset_factory, modelformset_factory)
+from django.forms import BaseModelFormSet
 
 class MDBListarr():
     def __init__(self):
@@ -17,7 +19,7 @@ class MDBListarr():
         self.radarr_url = None 
         self.radarr_apikey = None
         self.radarr_quality_profile = None
-        self.radarr_root_folder = None
+        # self.radarr_root_folder = None
         self.sonarr_url = None 
         self.sonarr_apikey = None
         self.sonarr_quality_profile = None
@@ -53,7 +55,10 @@ class MDBListarr():
 
         pref = Preferences.objects.filter(name='radarr_root_folder').first()
         if pref is not None:
-            self.radarr_root_folder = pref.value
+            # Legacy value, migration is needed
+            rd = RadarrDestinations(genre='all', root_folder=pref.value)
+            rd.save()            
+            Preferences.objects.filter(name='radarr_root_folder').delete()
 
         pref = Preferences.objects.filter(name='sonarr_apikey').first()
         if pref is not None:
@@ -75,7 +80,7 @@ class MDBListarr():
         choices_list = []
         if self.radarr is not None:
             quality_profiles = self.radarr.get_quality_profile()
-            choices_list = [('0', 'Select Default Quality Profile')]
+            choices_list = [('0', 'Select Quality Profile')]
             for profile in quality_profiles:
                 choices_list.append((profile['id'], profile['name']))
         return choices_list
@@ -84,7 +89,7 @@ class MDBListarr():
         choices_list = []
         if self.radarr is not None:
             quality_profiles = self.radarr.get_root_folder()
-            choices_list = [('0', 'Select Default Root Folder')]
+            choices_list = [('0', 'Select Root Folder')]
             for profile in quality_profiles:
                 choices_list.append((profile['path'], profile['path']))
         return choices_list
@@ -93,9 +98,54 @@ class MDBListarr():
         choices_list = []
         if self.sonarr is not None:
             quality_profiles = self.sonarr.get_quality_profile()
-            choices_list = [('0', 'Select Default Quality Profile')]
+            choices_list = [('0', 'Select Quality Profile')]
             for profile in quality_profiles:
                 choices_list.append((profile['id'], profile['name']))
+        return choices_list
+
+    def get_genre_choices(self):
+        choices_list = [('all', 'All Genres'),
+                        ('action', 'Action'),
+                        ('adventure', 'Adventure'),
+                        ('animation', 'Animation'),
+                        ('anime', 'Anime'),
+                        ('biography', 'Biography'),
+                        ('children', 'Children'),
+                        ('comedy', 'Comedy'),
+                        ('crime', 'Crime'),
+                        ('documentary', 'Documentary'),
+                        ('drama', 'Drama'),
+                        ('family', 'Family'),
+                        ('fantasy', 'Fantasy'),
+                        ('film-noir', 'Film Noir'),
+                        ('game-show', 'Game Show'),
+                        ('history', 'History'),
+                        ('holiday', 'Holiday'),
+                        ('home-and-garden', 'Home and Garden'),
+                        ('horror', 'Horror'),
+                        ('music', 'Music'),
+                        ('musical', 'Musical'),
+                        ('mystery', 'Mystery'),
+                        ('news', 'News'),
+                        ('reality', 'Reality'),
+                        ('reality-tv', 'Reality TV'),
+                        ('romance', 'Romance'),
+                        ('science-fiction', 'Science Fiction'),
+                        ('sci-fi', 'Sci-Fi'),
+                        ('short', 'Short'),
+                        ('soap', 'Soap'),
+                        ('special-interest', 'Special Interest'),
+                        ('sport', 'Sport'),
+                        ('sporting-event', 'Sporting Event'),
+                        ('superhero', 'Superhero'),
+                        ('suspense', 'Suspense'),
+                        ('talk-show', 'Talk Show'),
+                        ('thriller', 'Thriller'),
+                        ('tv-movie', 'TV Movie'),
+                        ('war', 'War'),
+                        ('western', 'Western'),
+                        ]
+             
         return choices_list
 
     def get_sonarr_root_folder_choices(self):
@@ -144,10 +194,6 @@ class UserInfoForm(forms.Form):
                     self._errors['radarr_quality_profile'] = self.error_class(['Select profile'])
                     self.fields['radarr_quality_profile'].widget.attrs.update({'class': 'form-control is-invalid'})
                     found_error = True
-                if self.cleaned_data['radarr_root_folder'] == '' or self.cleaned_data['radarr_root_folder'] == '0':
-                    self._errors['radarr_root_folder'] = self.error_class(['Select root folder'])
-                    self.fields['radarr_root_folder'].widget.attrs.update({'class': 'form-control is-invalid'})
-                    found_error = True
 
             else:
                 self._errors['radarr_apikey'] = self.error_class(['Unable to connect'])
@@ -191,15 +237,15 @@ class UserInfoForm(forms.Form):
     def update_drop_fields(self):
         if mdblistarr.radarr is not None:
             self.fields['radarr_quality_profile'].disabled = False
-            self.fields['radarr_root_folder'].disabled = False
+            # self.fields['radarr_root_folder'].disabled = False
             self.fields['radarr_quality_profile'].choices = mdblistarr.get_radarr_quality_profile_choices()
-            self.fields['radarr_root_folder'].choices = mdblistarr.get_radarr_root_folder_choices()
+            # self.fields['radarr_root_folder'].choices = mdblistarr.get_radarr_root_folder_choices()
             radarr_status = mdblistarr.radarr.get_status()
             if radarr_status['status'] == 1:
                 self.fields['radarr_apikey'].help_text = f"{radarr_status['json']['instanceName']} {radarr_status['json']['version']}"
         else:
             self.fields['radarr_quality_profile'].disabled = True
-            self.fields['radarr_root_folder'].disabled = True
+            # self.fields['radarr_root_folder'].disabled = True
 
         if mdblistarr.sonarr is not None:
             self.fields['sonarr_quality_profile'].disabled = False
@@ -215,7 +261,7 @@ class UserInfoForm(forms.Form):
 
 
     radarr_quality_profile = forms.ChoiceField(label='Select Quality Profile', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_radarr_quality_profile_choices())
-    radarr_root_folder = forms.ChoiceField(label='Select Root Folder', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_radarr_root_folder_choices())
+    # radarr_root_folder = forms.ChoiceField(label='Select Root Folder', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_radarr_root_folder_choices())
     sonarr_quality_profile = forms.ChoiceField(label='Select Quality Profile', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_sonarr_quality_profile_choices())
     sonarr_root_folder = forms.ChoiceField(label='Select Root Folder', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_sonarr_root_folder_choices())
 
@@ -225,19 +271,65 @@ class UserInfoForm(forms.Form):
     sonarr_apikey = forms.CharField(label='Sonarr API Key', required=False, widget=forms.TextInput(attrs={'placeholder': 'Enter your Sonarr API key', 'class': 'form-control'}))
     sonarr_url = forms.CharField(label='Sonarr URL', required=False, widget=forms.TextInput(attrs={'placeholder': 'Enter your Sonarr URL', 'class': 'form-control'}))
 
+class BaseUnloadFormset(BaseModelFormSet):
+    #clean validation
+    def clean(self):
+        super().clean()
+
+        print('clean')
+        for dest_form in self.forms:
+            if dest_form.cleaned_data.get('genre') and dest_form.cleaned_data.get('root_folder') and dest_form.cleaned_data.get('root_folder') != '0':
+                pass
+            else:
+                dest_form.fields['root_folder'].widget.attrs.update({'class': 'form-control is-invalid'})
+                dest_form.add_error('root_folder', 'Root folder not selected')
+
+RadarrDestinationModelFormset = modelformset_factory(
+    model = RadarrDestinations,
+    fields = ( 'genre', 'root_folder', ),
+    extra = 1,
+    widgets = {
+        'genre': forms.Select(attrs={'class': 'form-control', 'placeholder': 'Enter genre Name here'}),
+        'root_folder': forms.Select(attrs={'class': 'form-control', 'placeholder': 'Enter root_folder Name here'})
+    },
+    formset = BaseUnloadFormset
+)
+
 def home_view(request):
 
+    message = None
+
+    if request.method == 'GET':
+        form = UserInfoForm(initial={   'mdblist_apikey': mdblistarr.mdblist_apikey, 
+                                        'radarr_apikey': mdblistarr.radarr_apikey, 
+                                        'radarr_url': mdblistarr.radarr_url, 
+                                        'radarr_quality_profile': mdblistarr.radarr_quality_profile, 
+                                        # 'radarr_root_folder': mdblistarr.radarr_root_folder, 
+                                        'sonarr_apikey': mdblistarr.sonarr_apikey, 
+                                        'sonarr_url': mdblistarr.sonarr_url,
+                                        'sonarr_quality_profile': mdblistarr.sonarr_quality_profile, 
+                                        'sonarr_root_folder': mdblistarr.sonarr_root_folder
+                                    })
+        formset = RadarrDestinationModelFormset(queryset=RadarrDestinations.objects.all())
+        if RadarrDestinations.objects.all().count() > 0:
+            formset.extra = 0
+        formset.form.base_fields['genre'] = forms.ChoiceField(label='Select Quality Profile', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_genre_choices())
+        formset.form.base_fields['root_folder'] = forms.ChoiceField(label='Select Quality Profile', required=False, widget=forms.Select(attrs={'placeholder': 'Name', 'class': 'form-control'}), choices=mdblistarr.get_radarr_root_folder_choices())
+
+        return render(request, "index.html", {'form': form, 'formset': formset, })
+
     if request.method == "POST":
+
         form = UserInfoForm(request.POST)
-        if form.is_valid():
+        formset = RadarrDestinationModelFormset(request.POST)
+
+        if form.is_valid() and formset.is_valid():
             Preferences.objects.update_or_create(name='mdblist_apikey', defaults={'value': form.cleaned_data['mdblist_apikey']},)
             mdblistarr.mdblist_apikey = form.cleaned_data['mdblist_apikey']
             Preferences.objects.update_or_create(name='radarr_apikey', defaults={'value': form.cleaned_data['radarr_apikey']},)
             mdblistarr.radarr_apikey = form.cleaned_data['radarr_apikey']
             Preferences.objects.update_or_create(name='radarr_url', defaults={'value': form.cleaned_data['radarr_url']},)
             mdblistarr.radarr_url = form.cleaned_data['radarr_url']
-            Preferences.objects.update_or_create(name='radarr_root_folder', defaults={'value': form.cleaned_data['radarr_root_folder']},)
-            mdblistarr.radarr_root_folder = form.cleaned_data['radarr_root_folder']
             Preferences.objects.update_or_create(name='radarr_quality_profile', defaults={'value': form.cleaned_data['radarr_quality_profile']},)
             mdblistarr.radarr_quality_profile = form.cleaned_data['radarr_quality_profile']
             Preferences.objects.update_or_create(name='sonarr_quality_profile', defaults={'value': form.cleaned_data['sonarr_quality_profile']},)
@@ -249,22 +341,15 @@ def home_view(request):
             Preferences.objects.update_or_create(name='sonarr_url', defaults={'value': form.cleaned_data['sonarr_url']},)
             mdblistarr.sonarr_url = form.cleaned_data['sonarr_url']
 
-            form.update_drop_fields()
-            return render(request, "index.html", {'form': form, })
+            RadarrDestinations.objects.all().delete()
+            for dest_form in formset:
+                if dest_form.cleaned_data.get('genre') and dest_form.cleaned_data.get('root_folder') and dest_form.cleaned_data.get('root_folder') != '0':
+                    dest_form.save()
+
+            message = 'Saved successfully'
         else:
-            form.update_drop_fields()
-            return render(request, "index.html", {'form': form, })
-    else:
-        form = UserInfoForm(initial={   'mdblist_apikey': mdblistarr.mdblist_apikey, 
-                                        'radarr_apikey': mdblistarr.radarr_apikey, 
-                                        'radarr_url': mdblistarr.radarr_url, 
-                                        'radarr_quality_profile': mdblistarr.radarr_quality_profile, 
-                                        'radarr_root_folder': mdblistarr.radarr_root_folder, 
-                                        'sonarr_apikey': mdblistarr.sonarr_apikey, 
-                                        'sonarr_url': mdblistarr.sonarr_url,
-                                        'sonarr_quality_profile': mdblistarr.sonarr_quality_profile, 
-                                        'sonarr_root_folder': mdblistarr.sonarr_root_folder
-                                    })
-        return render(request, "index.html", {'form': form, })
+            form.add_error(None, "Correct all errors to save the changes")
 
-
+        form.update_drop_fields()
+                       
+        return render(request, "index.html", {'form': form, 'formset': formset, 'message': message })

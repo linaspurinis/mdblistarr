@@ -19,7 +19,7 @@
     {% for log in logs %}
       <tr>
         <th scope="row">{% if log.provider == 1 %}Radarr{% elif log.provider == 2 %}Sonarr{% else %}{{ log.provider }}{% endif %}</td>
-        <th {% if log.status == 1 %}class="badge text-bg-success"{% elif log.status == 2 %}class="badge text-bg-warning"{% endif %}>{% if log.status == 1 %}Success{% elif log.status == 2 %}Warning{% endif %}</th>
+        <th {% if log.status == 1 %}class="badge text-bg-success"{% elif log.status == 2 %}class="badge text-bg-warning"{% elif log.status == 3 %}class="badge text-bg-danger"{% endif %}>{% if log.status == 1 %}Success{% elif log.status == 2 %}Warning{% elif log.status == 3 %}Error{% endif %}</th>
         <td nowrap="nowrap">{{ log.date|date:"Y-m-d H:i:s" }}</th>
         <td>{{log.text}}</td>
       </tr>
