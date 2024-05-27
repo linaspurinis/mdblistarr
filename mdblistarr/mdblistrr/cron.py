@@ -4,13 +4,8 @@ from .connect import Connect
 import time
 import random
 import traceback
-from .models import Log, RadarrDestinations
+from .models import Log
 from .views import MDBListarr
-import ast
-
-OK = 1
-WARNING = 2
-ERROR = 3
 
 def save_log(provider, status, text):
     log = Log()
@@ -44,13 +39,13 @@ def post_radarr_payload():
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
         print(res)
         if res['response'] == 'Ok':
-            save_log(provider, OK, f'Uploaded {total_records} records to MDBList.com')
+            save_log(provider, 1, f'Uploaded {total_records} records to MDBList.com')
             return JsonResponse(res)
         else:
-            save_log(provider, WARNING, f'Upload records to MDBList.com Failed: {res}')
+            save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
             return JsonResponse(res)
     except:
-        save_log(provider, ERROR, f'{traceback.format_exc()}')
+        save_log(provider, 2, f'{traceback.format_exc()}')
         return JsonResponse({'response': 'Exception'})
 
 def post_sonarr_payload():
@@ -63,10 +58,9 @@ def post_sonarr_payload():
 
         json = []
         for show in series:
-            exists = None
             if show.get('tvdbId'):
+                exists = None
                 if show.get('seasons'):
-                    exists = False
                     for season in show['seasons']:
                         if season['statistics']['percentOfEpisodes'] == 100:
                             # At least one season is downloaded 100%
@@ -80,30 +74,17 @@ def post_sonarr_payload():
 
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
         if res['response'] == 'Ok':
-            save_log(provider, OK, f'Uploaded {total_records} records to MDBList.com')
+            save_log(provider, 1, f'Uploaded {total_records} records to MDBList.com')
             return JsonResponse(res)
         else:
-            save_log(provider, WARNING, f'Upload records to MDBList.com Failed: {res}')
+            save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
             return JsonResponse(res)
     except:
-        save_log(provider, ERROR, f'{traceback.format_exc()}')
+        save_log(provider, 2, f'{traceback.format_exc()}')
         return JsonResponse({'response': 'Exception'})
 
-def get_radarr_root_folder_from_genre(genres):
-    genres_list = ast.literal_eval(genres)
-    if genres_list is not None:
-        dest = RadarrDestinations.objects.filter(genre__in=genres_list).first()
-        if dest is None:
-            dest = RadarrDestinations.objects.filter(genre='all').first()
-        if dest is not None:
-            root_folder = dest.root_folder
-        else:
-            root_folder = None
-        return root_folder
-    else:
-        return None
-
 def get_mdblist_queue_to_arr():
+
     try:
         time.sleep(random.uniform(0.0, 36.0))
         mdblistarr = MDBListarr()
@@ -111,34 +92,30 @@ def get_mdblist_queue_to_arr():
 
         for item in queue:
             if item['mediatype'] == 'movie':
-                provider = 1 # RADARR
-                radarr_root_folder = get_radarr_root_folder_from_genre(item.get('genres'))
-                if radarr_root_folder is not None:
-                    movie_request_json = {
-                        "title": item['title'],
-                        "tmdbId": item['tmdbid'],
-                        "monitored": True, 
-                        "addOptions": {"searchForMovie": True},
-                        "qualityProfileId": mdblistarr.radarr_quality_profile,
-                        "rootFolderPath": radarr_root_folder
-                    }
-                    res = mdblistarr.radarr.post_movie(movie_request_json)
-                    if isinstance(res, list):
-                        if res[0].get('errorMessage'):
-                            save_log(provider, WARNING, f"Error adding movie to Radarr: {item['title']}. {res[0]['errorMessage']}.")
-                        else:
-                            save_log(provider, ERROR, f"Error posting movie to Radarr")
-                    elif res.get('title'):
-                        save_log(provider, OK, f"Added movie to Radarr: {item['title']}.")
+                provider = 1
+                movie_request_json = {
+                    "title": item['title'],
+                    "tmdbid": item['tmdbid'],
+                    "monitored": True, 
+                    "addOptions": {"searchForMovie": True},
+                    "qualityProfileId": mdblistarr.radarr_quality_profile,
+                    "rootFolderPath": mdblistarr.radarr_root_folder
+                }
+                res = mdblistarr.radarr.post_movie(movie_request_json)
+                if isinstance(res, list):
+                    if res[0].get('errorMessage'):
+                        save_log(provider, 2, f"Error adding movie to Radarr: {item['title']}. {res[0]['errorMessage']}.")
                     else:
-                        save_log(provider, ERROR, f"Error posting movie to Radarr")
+                        save_log(provider, 2, f"Error posting movie to Radarr")
+                elif res.get('title'):
+                    save_log(provider, 1, f"Added movie to Radarr: {item['title']}.")
                 else:
-                    save_log(provider, ERROR, f"Root folder is not set for genre {item.get('genre')}")
+                    save_log(provider, 2, f"Error posting movie to Radarr")
             elif item['mediatype'] == 'show':
-                provider = 2 # SONARR
+                provider = 2
                 show_request_json = {
                     "title": item['title'],
-                    "tvdbId": item['tvdbid'],
+                    "tvdbid": item['tvdbid'],
                     "monitored": True, 
                     "addOptions": {"searchForMissingEpisodes": True},
                     "qualityProfileId": mdblistarr.sonarr_quality_profile,
@@ -147,15 +124,15 @@ def get_mdblist_queue_to_arr():
                 res = mdblistarr.sonarr.post_show(show_request_json)
                 if isinstance(res, list):
                     if res[0].get('errorMessage'):
-                        save_log(provider, WARNING, f"Error adding show to Sonarr: {item['title']}. {res[0]['errorMessage']}")
+                        save_log(provider, 2, f"Error adding show to Sonarr: {item['title']}. {res[0]['errorMessage']}")
                     else:
-                        save_log(provider, ERROR, f"Error posting show to Sonarr")
+                        save_log(provider, 2, f"Error posting show to Sonarr")
                 elif res.get('title'):
-                    save_log(provider, OK, f"Added show to Sonarr {item['title']}.")
+                    save_log(provider, 1, f"Added show to Sonarr {item['title']}.")
                 else:
-                    save_log(provider, ERROR, f"Error posting show to Sonarr")
+                    save_log(provider, 2, f"Error posting show to Sonarr")
     except:
-        save_log(provider, ERROR, f'{traceback.format_exc()}')
+        save_log(provider, 2, f'{traceback.format_exc()}')
         return JsonResponse({'result': 500})
     
     return JsonResponse({'result': 200})

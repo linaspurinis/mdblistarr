@@ -54,17 +54,6 @@
 
         {% block body %}
         {% endblock %}
-
-        <div class="container">
-          <div class="row spacer"></div>
-          <div class="row offset-2">
-              <div class="col-12">
-                  {% block container %}
-                  {% endblock %}
-              </div>
-          </div>
-      </div>
-        
         <div class="container">
             <div class="d-grid gap-2 d-md-flex justify-content-md-end">
             <button class="btn btn-dark shadow" id="btnSwitch">Toggle Dark Mode</button>
@@ -85,6 +74,5 @@
                 }
             })            
         </script>
-    {% block custom_js %}{% endblock %}
     </body>
 </html>
