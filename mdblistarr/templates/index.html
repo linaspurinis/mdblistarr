@@ -96,10 +96,15 @@
                     </div>
                 </div>
                 
-                <!-- Quality Profile field -->
                 <div class="fieldWrapper mb-3">
                     {{ form.quality_profile.label_tag }}
-                    {{ form.quality_profile }}
+                    <select name="{{ form.quality_profile.name }}" id="{{ form.quality_profile.auto_id }}" class="form-control">
+                        {% for value, text in form.fields.quality_profile.choices %}
+                            <option value="{{ value }}" {% if value == form.instance.quality_profile|stringformat:"s" %}selected="selected"{% endif %}>
+                                {{ text }}
+                            </option>
+                        {% endfor %}
+                    </select>
                     <div class="invalid-feedback">
                         {{ form.quality_profile.errors.0 }}
                     </div>
@@ -107,11 +112,17 @@
                         {{ form.quality_profile.help_text }}
                     </div>
                 </div>
-                
-                <!-- Root Folder field -->
+
+
                 <div class="fieldWrapper mb-3">
                     {{ form.root_folder.label_tag }}
-                    {{ form.root_folder }}
+                    <select name="{{ form.root_folder.name }}" id="{{ form.root_folder.auto_id }}" class="form-control">
+                        {% for value, text in form.fields.root_folder.choices %}
+                            <option value="{{ value }}" {% if value == form.instance.root_folder|stringformat:"s" %}selected="selected"{% endif %}>
+                                {{ text }}
+                            </option>
+                        {% endfor %}
+                    </select>
                     <div class="invalid-feedback">
                         {{ form.root_folder.errors.0 }}
                     </div>
@@ -135,7 +146,6 @@
             <i class="bi bi-plus-circle"></i> Add Radarr Instance
         </button>
     </form>
-    
     <!-- Sonarr Instances -->
     <h3>
         Sonarr Instances

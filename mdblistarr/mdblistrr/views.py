@@ -12,6 +12,10 @@ from .arr import MdblistAPI
 from django.core.exceptions import ValidationError
 import traceback
 import json
+import logging  # Added for debugging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class MDBListarr():
     def __init__(self):
@@ -34,9 +38,10 @@ class MDBListarr():
             if radarr:
                 quality_profiles = radarr.get_quality_profile()
                 for profile in quality_profiles:
-                    choices_list.append((profile['id'], profile['name']))
-        except Exception:
-            pass
+                    choices_list.append((str(profile['id']), profile['name']))
+            logger.debug(f"Radarr quality profiles for {url}: {choices_list}")
+        except Exception as e:
+            logger.error(f"Error fetching Radarr quality profiles: {str(e)}")
         return choices_list
 
     def get_radarr_root_folder_choices(self, url, apikey):
@@ -47,8 +52,9 @@ class MDBListarr():
                 root_folders = radarr.get_root_folder()
                 for folder in root_folders:
                     choices_list.append((folder['path'], folder['path']))
-        except Exception:
-            pass
+            logger.debug(f"Radarr root folders for {url}: {choices_list}")
+        except Exception as e:
+            logger.error(f"Error fetching Radarr root folders: {str(e)}")
         return choices_list
 
     def get_sonarr_quality_profile_choices(self, url, apikey):
@@ -58,9 +64,10 @@ class MDBListarr():
             if sonarr:
                 quality_profiles = sonarr.get_quality_profile()
                 for profile in quality_profiles:
-                    choices_list.append((profile['id'], profile['name']))
-        except Exception:
-            pass
+                    choices_list.append((str(profile['id']), profile['name']))
+            logger.debug(f"Sonarr quality profiles for {url}: {choices_list}")
+        except Exception as e:
+            logger.error(f"Error fetching Sonarr quality profiles: {str(e)}")
         return choices_list
 
     def get_sonarr_root_folder_choices(self, url, apikey):
@@ -71,8 +78,9 @@ class MDBListarr():
                 root_folders = sonarr.get_root_folder()
                 for folder in root_folders:
                     choices_list.append((folder['path'], folder['path']))
-        except Exception:
-            pass
+            logger.debug(f"Sonarr root folders for {url}: {choices_list}")
+        except Exception as e:
+            logger.error(f"Error fetching Sonarr root folders: {str(e)}")
         return choices_list
 
     def test_radarr_connection(self, url, apikey):
@@ -143,6 +151,10 @@ class RadarrInstanceForm(forms.ModelForm):
         self.fields['quality_profile'].choices = [('0', 'Select Quality Profile')]
         self.fields['root_folder'].choices = [('0', 'Select Root Folder')]
         
+        # Ensure these are always rendered as Select widgets
+        self.fields['quality_profile'].widget = forms.Select(attrs={'class': 'form-control'})
+        self.fields['root_folder'].widget = forms.Select(attrs={'class': 'form-control'})
+            
         # Check bound data first (for POST submissions)
         if self.is_bound and 'url' in self.data and 'apikey' in self.data:
             url = self.data.get('url')
@@ -152,12 +164,20 @@ class RadarrInstanceForm(forms.ModelForm):
                 self.fields['root_folder'].choices = mdblistarr.get_radarr_root_folder_choices(url, apikey)
         # Then check instance data (for existing instances)
         elif self.instance and self.instance.url and self.instance.apikey:
-            self.fields['quality_profile'].choices = mdblistarr.get_radarr_quality_profile_choices(
-                self.instance.url, self.instance.apikey
-            )
-            self.fields['root_folder'].choices = mdblistarr.get_radarr_root_folder_choices(
-                self.instance.url, self.instance.apikey
-            )
+            quality_choices = mdblistarr.get_radarr_quality_profile_choices(self.instance.url, self.instance.apikey)
+            root_choices = mdblistarr.get_radarr_root_folder_choices(self.instance.url, self.instance.apikey)
+            self.fields['quality_profile'].choices = quality_choices
+            self.fields['root_folder'].choices = root_choices
+            
+            # Ensure saved values are in choices and set as initial
+            if self.instance.quality_profile:
+                if not any(str(self.instance.quality_profile) == choice[0] for choice in quality_choices):
+                    quality_choices.append((self.instance.quality_profile, f"Profile {self.instance.quality_profile} (saved)"))
+                self.initial['quality_profile'] = self.instance.quality_profile
+            if self.instance.root_folder:
+                if not any(self.instance.root_folder == choice[0] for choice in root_choices):
+                    root_choices.append((self.instance.root_folder, self.instance.root_folder))
+                self.initial['root_folder'] = self.instance.root_folder
     
     def clean(self):
         cleaned_data = super().clean()
@@ -223,12 +243,20 @@ class SonarrInstanceForm(forms.ModelForm):
                 self.fields['quality_profile'].choices = mdblistarr.get_sonarr_quality_profile_choices(url, apikey)
                 self.fields['root_folder'].choices = mdblistarr.get_sonarr_root_folder_choices(url, apikey)
         elif self.instance and self.instance.url and self.instance.apikey:
-            self.fields['quality_profile'].choices = mdblistarr.get_sonarr_quality_profile_choices(
-                self.instance.url, self.instance.apikey
-            )
-            self.fields['root_folder'].choices = mdblistarr.get_sonarr_root_folder_choices(
-                self.instance.url, self.instance.apikey
-            )
+            quality_choices = mdblistarr.get_sonarr_quality_profile_choices(self.instance.url, self.instance.apikey)
+            root_choices = mdblistarr.get_sonarr_root_folder_choices(self.instance.url, self.instance.apikey)
+            self.fields['quality_profile'].choices = quality_choices
+            self.fields['root_folder'].choices = root_choices
+            
+            # Ensure saved values are in choices and set as initial
+            if self.instance.quality_profile:
+                if not any(str(self.instance.quality_profile) == choice[0] for choice in quality_choices):
+                    quality_choices.append((self.instance.quality_profile, f"Profile {self.instance.quality_profile} (saved)"))
+                self.initial['quality_profile'] = self.instance.quality_profile
+            if self.instance.root_folder:
+                if not any(self.instance.root_folder == choice[0] for choice in root_choices):
+                    root_choices.append((self.instance.root_folder, self.instance.root_folder))
+                self.initial['root_folder'] = self.instance.root_folder
     
     def clean(self):
         cleaned_data = super().clean()
@@ -303,8 +331,8 @@ def home_view(request):
             if instance_id == 'new':
                 form = RadarrInstanceForm(request.POST, prefix='radarr_new')
                 if form.is_valid():
-                    form.save()
-                    return HttpResponseRedirect(reverse('home_view'))
+                    instance = form.save()
+                    return HttpResponseRedirect(reverse('home_view') + '?add_radarr=1')
                 else:
                     radarr_forms = [form if f.prefix == 'radarr_new' else f for f in radarr_forms]
             else:
@@ -321,7 +349,7 @@ def home_view(request):
             if instance_id == 'new':
                 form = SonarrInstanceForm(request.POST, prefix='sonarr_new')
                 if form.is_valid():
-                    form.save()
+                    instance = form.save()
                     return HttpResponseRedirect(reverse('home_view'))
                 else:
                     sonarr_forms = [form if f.prefix == 'sonarr_new' else f for f in sonarr_forms]
@@ -343,12 +371,25 @@ def home_view(request):
             elif model_type == 'sonarr' and SonarrInstance.objects.count() > 1:
                 SonarrInstance.objects.filter(id=instance_id).delete()
             return HttpResponseRedirect(reverse('home_view'))
-        
+
         elif form_type.startswith('test_'):
             parts = form_type.split('_')
             model_type = parts[1]
             instance_id = parts[2]
+
+            # Set a flag to keep the new form visible
+            show_new_radarr = model_type == 'radarr' and instance_id == 'new'
+            show_new_sonarr = model_type == 'sonarr' and instance_id == 'new'
             
+            # Rest of your code for testing connection...
+            
+            # After all processing, ensure the new form is still included
+            if show_new_radarr and not any(f.prefix == 'radarr_new' for f in radarr_forms):
+                radarr_forms.append(RadarrInstanceForm(prefix='radarr_new'))
+            if show_new_sonarr and not any(f.prefix == 'sonarr_new' for f in sonarr_forms):
+                sonarr_forms.append(SonarrInstanceForm(prefix='sonarr_new'))
+
+
             if model_type == 'radarr':
                 if instance_id == 'new':
                     form = RadarrInstanceForm(request.POST, prefix='radarr_new')
@@ -428,7 +469,7 @@ def home_view(request):
                         sonarr_forms = [updated_form if f.prefix == f'sonarr_{instance_id}' else f for f in sonarr_forms]
                     else:
                         sonarr_forms = [form if f.prefix == f'sonarr_{instance_id}' else f for f in sonarr_forms]
-    
+
     context = {
         'mdblist_form': mdblist_form,
         'radarr_forms': radarr_forms,
