@@ -122,18 +122,13 @@
                 
                 <div class="d-grid gap-2 d-md-flex">
                     <button type="submit" class="btn btn-success">Save</button>
-                    
-                    <!-- Test Connection button -->
-                    <button type="submit" name="form_type" value="test_radarr_{% if form.prefix != 'radarr_new' %}{{ form.prefix|slice:"7:" }}{% else %}new{% endif %}" class="btn btn-primary test-connection">
-                        Test Connection
-                    </button>
+                    <button type="submit" name="form_type" value="test_radarr_{% if form.prefix != 'radarr_new' %}{{ form.prefix|slice:"7:" }}{% else %}new{% endif %}" class="btn btn-primary test-connection">Test Connection</button>
                 </div>
             </form>
         </div>
     </div>
     {% endfor %}
     
-    <!-- Add new Radarr instance button -->
     <form action="{% url 'home_view' %}" method="get" class="mb-4">
         <input type="hidden" name="add_radarr" value="1">
         <button type="submit" class="btn btn-outline-primary">
@@ -228,18 +223,13 @@
                 
                 <div class="d-grid gap-2 d-md-flex">
                     <button type="submit" class="btn btn-success">Save</button>
-                    
-                    <!-- Test Connection button -->
-                    <button type="submit" name="form_type" value="test_sonarr_{% if form.prefix != 'sonarr_new' %}{{ form.prefix|slice:"7:" }}{% else %}new{% endif %}" class="btn btn-primary test-connection">
-                        Test Connection
-                    </button>
+                    <button type="submit" name="form_type" value="test_sonarr_{% if form.prefix != 'sonarr_new' %}{{ form.prefix|slice:"7:" }}{% else %}new{% endif %}" class="btn btn-primary test-connection">Test Connection</button>
                 </div>
             </form>
         </div>
     </div>
     {% endfor %}
     
-    <!-- Add new Sonarr instance button -->
     <form action="{% url 'home_view' %}" method="get" class="mb-4">
         <input type="hidden" name="add_sonarr" value="1">
         <button type="submit" class="btn btn-outline-primary">
@@ -249,12 +239,39 @@
 
 </div>
 
-<!-- Optional: JavaScript to enhance the UI experience (can be moved to a separate JS file) -->
 <script>
-    // Enhance the test connection buttons with AJAX functionality if needed
-    document.addEventListener('DOMContentLoaded', function() {
-        // You could add JavaScript here to enhance the UI, like making test connection use AJAX
-        // instead of a full page reload, or having dynamic form field validation
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.test-connection').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const form = this.closest('form');
+            const formData = new FormData(form);
+            const url = form.querySelector('[name$="-url"]').value;
+            const apikey = form.querySelector('[name$="-apikey"]').value;
+            const isRadarr = form.querySelector('[name="form_type"]').value.startsWith('radarr_');
+            const endpoint = isRadarr ? '/test_radarr_connection/' : '/test_sonarr_connection/';
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, apikey })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const qualitySelect = form.querySelector('[name$="-quality_profile"]');
+                    const rootSelect = form.querySelector('[name$="-root_folder"]');
+                    qualitySelect.innerHTML = data.quality_profiles.map(([value, text]) => 
+                        `<option value="${value}">${text}</option>`).join('');
+                    rootSelect.innerHTML = data.root_folders.map(([value, text]) => 
+                        `<option value="${value}">${text}</option>`).join('');
+                    form.querySelector('.valid-feedback').textContent = data.version;
+                } else {
+                    form.querySelector('.invalid-feedback').textContent = data.message;
+                }
+            });
+        });
     });
+});
 </script>
 {% endblock %}
