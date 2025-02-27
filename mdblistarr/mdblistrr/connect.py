@@ -1,6 +1,7 @@
 import logging, time, json, re, requests
 from urllib.parse import urlparse
 from retrying import retry
+from requests.exceptions import RequestException, JSONDecodeError, ConnectionError
 from lxml import html
 
 logging.basicConfig(format='%(asctime)s severity=%(levelname)s filename=%(filename)s line=%(lineno)s message="%(message)s"', level=logging.INFO)
@@ -40,7 +41,22 @@ class Connect:
         return html.fromstring(self.post(url, data=data, json=json, headers=headers, cookies=cookies).content)
 
     def post_json(self, url, data=None, json=None, headers=None, params=None, cookies=None):
-        return self.post(url, data=data, json=json, headers=headers, params=params, cookies=cookies).json()
+        try:
+            response = self.post(url, data=data, json=json, headers=headers, params=params, cookies=cookies)
+            if not response.text.strip():
+                return {"error": "Empty response from server", "status_code": response.status_code}
+            try:
+                return response.json()
+            except JSONDecodeError:
+                return {
+                    "error": "Invalid POST response",
+                    "status_code": response.status_code,
+                    "raw_response": response.text[:500]  # Limit output for debugging
+                }
+        except ConnectionError as e:
+            return {"error": "Connection failed", "exception": str(e)}
+        except RequestException as e:
+            return {"error": "Request failed", "exception": str(e)}
 
     @retry(stop_max_attempt_number=6, wait_fixed=10000)
     def post(self, url, data=None, json=None, headers=None, params=None, cookies=None):

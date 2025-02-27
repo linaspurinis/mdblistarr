@@ -45,6 +45,7 @@ CRONJOBS = [
     ('11 10 * * *', 'mdblistrr.cron.post_radarr_payload'),
     ('11 11 * * *', 'mdblistrr.cron.post_sonarr_payload'),
     ('*/5 * * * *', 'mdblistrr.cron.get_mdblist_queue_to_arr'),
+    ('*/15 * * * *', 'mdblistrr.cron.process_instance_changes'),
 ]
 
 MIDDLEWARE = [

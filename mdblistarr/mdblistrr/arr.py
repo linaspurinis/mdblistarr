@@ -122,3 +122,9 @@ class MdblistAPI():
             return(self.connect.get_json(f"{self.url}/service/mdblist/queue", params={"apikey": self.apikey}))
         except:
             return {'response': f'{traceback.format_exc()}'}
+
+    def post_arr_changes(self, payload):
+        try:
+            return(self.connect.post_json(f"{self.url}/service/mdblist/config", json=payload, params={"apikey": self.apikey}))
+        except:
+            return {'response': 'Exception', 'error': f'{traceback.format_exc()}'}

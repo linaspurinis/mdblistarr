@@ -4,6 +4,15 @@
 <div class="container">
     <br>
 
+    <!-- Display Messages -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert {% if message.tags == 'success' %}alert-success{% else %}alert-warning{% endif %}" role="alert">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+    
     <!-- MDBList Configuration -->
     <form action="{% url 'home_view' %}" method="post">
         {% csrf_token %}
@@ -26,7 +35,7 @@
                     {{ mdblist_form.mdblist_apikey.errors.0 }}
                 </div>
                 <div class="valid-feedback">
-                    {{ mdblist_form.mdblist_apikey.help_text }}
+                    {% if not mdblist_form.errors %}API key validated successfully{% else %}{{ mdblist_form.mdblist_apikey.help_text }}{% endif %}
                 </div>
             </div>
         </div>
@@ -270,6 +279,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const apikey = form.querySelector('input[name="apikey"]').value;
             const isRadarr = this.value === 'test_radarr';
             
+            // Store current selections before updating
+            const qualitySelect = form.querySelector('select[name="quality_profile"]');
+            const rootSelect = form.querySelector('select[name="root_folder"]');
+            const currentQualityValue = qualitySelect.value;
+            const currentRootValue = rootSelect.value;
+            
             // Get the endpoint for the test
             const endpoint = isRadarr ? '/test_radarr_connection/' : '/test_sonarr_connection/';
             
@@ -286,7 +301,6 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.status === 'success') {
                     // Update the quality profile dropdown
-                    const qualitySelect = form.querySelector('select[name="quality_profile"]');
                     qualitySelect.innerHTML = '';
                     data.quality_profiles.forEach(profile => {
                         const option = document.createElement('option');
@@ -296,7 +310,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                     
                     // Update the root folder dropdown
-                    const rootSelect = form.querySelector('select[name="root_folder"]');
                     rootSelect.innerHTML = '';
                     data.root_folders.forEach(folder => {
                         const option = document.createElement('option');
@@ -304,6 +317,23 @@ document.addEventListener('DOMContentLoaded', function() {
                         option.textContent = folder[1];
                         rootSelect.appendChild(option);
                     });
+                    
+                    // Restore previous selections if they exist in the new options
+                    if (currentQualityValue) {
+                        // Check if the value exists in the new options
+                        const qualityExists = Array.from(qualitySelect.options).some(opt => opt.value === currentQualityValue);
+                        if (qualityExists) {
+                            qualitySelect.value = currentQualityValue;
+                        }
+                    }
+                    
+                    if (currentRootValue) {
+                        // Check if the value exists in the new options
+                        const rootExists = Array.from(rootSelect.options).some(opt => opt.value === currentRootValue);
+                        if (rootExists) {
+                            rootSelect.value = currentRootValue;
+                        }
+                    }
                     
                     // Show success message
                     const apikeyField = form.querySelector('input[name="apikey"]');

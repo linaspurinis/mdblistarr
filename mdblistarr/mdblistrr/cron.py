@@ -2,9 +2,10 @@ from django.http import JsonResponse
 from django.utils import timezone
 from .connect import Connect
 import time
+import json
 import random
 import traceback
-from .models import Log
+from .models import Log, InstanceChangeLog
 from .views import MDBListarr
 
 def save_log(provider, status, text):
@@ -37,7 +38,7 @@ def post_radarr_payload():
         json_payload = {'radarr': json}
 
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
-        print(res)
+
         if res['response'] == 'Ok':
             save_log(provider, 1, f'Uploaded {total_records} records to MDBList.com')
             return JsonResponse(res)
@@ -94,14 +95,17 @@ def get_mdblist_queue_to_arr():
         for item in queue:
             if item['mediatype'] == 'movie':
                 provider = 1
+                instanceid = item.get('instanceid')
                 movie_request_json = {
                     "title": item['title'],
                     "tmdbid": item['tmdbid'],
                     "monitored": True, 
                     "addOptions": {"searchForMovie": True},
-                    "qualityProfileId": mdblistarr.radarr_quality_profile,
-                    "rootFolderPath": mdblistarr.radarr_root_folder
+                    "qualityProfileId": mdblistarr.get_radarr_quality_profile(instanceid),
+                    "rootFolderPath": mdblistarr.get_radarr_root_folder(instanceid)
                 }
+                return JsonResponse({'result': 200})
+
                 res = mdblistarr.radarr.post_movie(movie_request_json)
                 if isinstance(res, list):
                     if res[0].get('errorMessage'):
@@ -137,3 +141,32 @@ def get_mdblist_queue_to_arr():
         return JsonResponse({'result': 500})
     
     return JsonResponse({'result': 200})
+
+def process_instance_changes():
+    provider = 3 # Instance Change Log
+    logs = InstanceChangeLog.objects.filter(processed=False).order_by('timestamp')
+    json_payload = {
+        'changes': [
+            {
+                'instance_type': log.instance_type,
+                'instance_id': log.instance_id,
+                'event_type': log.event_type,
+                'old_value': log.old_value,
+                'new_value': log.new_value,
+                'timestamp': log.timestamp.isoformat()
+            } for log in logs
+        ]
+    }
+    if not json_payload["changes"]:  # No changes to process
+        return JsonResponse({"response": "No pending changes"})
+
+    mdblistarr = MDBListarr()
+    res = mdblistarr.mdblist.post_arr_changes(json.dumps(json_payload))
+
+    if res.get('response') == 'Ok':
+        logs.update(processed=True)
+        save_log(provider, 1, f'Configuration uploaded to MDBList.com')
+        return JsonResponse(res)
+    else:
+        save_log(provider, 2, f'Configuration upload to MDBList.com Failed: {res}')
+        return JsonResponse(res)
