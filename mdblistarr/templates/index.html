@@ -4,115 +4,257 @@
 <div class="container">
 </br>
 
+    <!-- MDBList Configuration -->
     <form action="{% url 'home_view' %}" method="post">
         {% csrf_token %}
+        <input type="hidden" name="form_type" value="mdblist">
         <div class="form-group">
-        {% if form.non_field_errors.0 %}
-            <div class="alert alert-warning" role="alert">
-                {{ form.non_field_errors.0 }}
-            </div>        
-        {% endif %}
-        <p></p>
-        <h3>
-            MDBList
-            <small class="text-muted">Configuration Options</small>
-        </h3>        
-        <div class="fieldWrapper">
-            {{ form.mdblist_apikey.label_tag }}
-            {{ form.mdblist_apikey }}
-            <div  class="invalid-feedback">
-                {{form.mdblist_apikey.errors.0}}
-            </div>
-            <div  class="valid-feedback">
-                {{ form.mdblist_apikey.help_text }}
-            </div>
-        </div>
-        <p></p>
-        <h3>
-            Radarr
-            <small class="text-muted">Configuration Options</small>
-        </h3>
-        <div class="fieldWrapper">
-            {{ form.radarr_apikey.label_tag }}
-            {{ form.radarr_apikey }}
-            <div  class="invalid-feedback">
-                {{form.radarr_apikey.errors.0}}
-            </div>
-            <div  class="valid-feedback">
-                {{form.radarr_apikey.help_text}}
+            {% if mdblist_form.non_field_errors.0 %}
+                <div class="alert alert-warning" role="alert">
+                    {{ mdblist_form.non_field_errors.0 }}
+                </div>        
+            {% endif %}
+            <p></p>
+            <h3>
+                MDBList
+                <small class="text-muted">Configuration Options</small>
+            </h3>        
+            <div class="fieldWrapper">
+                {{ mdblist_form.mdblist_apikey.label_tag }}
+                {{ mdblist_form.mdblist_apikey }}
+                <div class="invalid-feedback">
+                    {{ mdblist_form.mdblist_apikey.errors.0 }}
+                </div>
+                <div class="valid-feedback">
+                    {{ mdblist_form.mdblist_apikey.help_text }}
+                </div>
             </div>
         </div>
-        <div class="fieldWrapper">
-            {{ form.radarr_url.errors }}
-            {{ form.radarr_url.label_tag }}
-            {{ form.radarr_url }}
+        <div class="d-grid gap-2 d-md-flex mb-4">
+            <input class="btn btn-success" type="submit" value="Save MDBList Configuration">
         </div>
-        <div class="fieldWrapper">
-            {{ form.radarr_quality_profile.label_tag }}
-            {{ form.radarr_quality_profile }}
-            <div  class="invalid-feedback">
-                {{form.radarr_quality_profile.errors.0}}
-            </div>
-            <div  class="valid-feedback">
-                {{form.radarr_quality_profile.help_text}}
-            </div>
-        </div>
-        <div class="fieldWrapper">
-            {{ form.radarr_root_folder.label_tag }}
-            {{ form.radarr_root_folder }}
-            <div  class="invalid-feedback">
-                {{form.radarr_root_folder.errors.0}}
-            </div>
-            <div  class="valid-feedback">
-                {{form.radarr_root_folder.help_text}}
-            </div>
-        </div>
-        <p></p>
-        <h3>
-            Sonarr
-            <small class="text-muted">Configuration Options</small>
-        </h3>        
-        <div class="fieldWrapper">
-            {{ form.sonarr_apikey.label_tag }}
-            {{ form.sonarr_apikey }}
-            <div  class="invalid-feedback">
-                {{form.sonarr_apikey.errors.0}}
-            </div>
-            <div  class="valid-feedback">
-                {{form.sonarr_apikey.help_text}}
-            </div>
-        </div>
-        <div class="fieldWrapper">
-            {{ form.sonarr_url.label_tag }}
-            {{ form.sonarr_url }}
-        </div>
-        <div class="fieldWrapper">
-            {{ form.sonarr_quality_profile.label_tag }}
-            {{ form.sonarr_quality_profile }}
-            <div  class="invalid-feedback">
-                {{form.sonarr_quality_profile.errors.0}}
-            </div>
-            <div  class="valid-feedback">
-                {{form.sonarr_quality_profile.help_text}}
-            </div>
-        </div>
-    <div class="fieldWrapper">
-            {{ form.sonarr_root_folder.label_tag }}
-            {{ form.sonarr_root_folder }}
-            <div  class="invalid-feedback">
-                {{form.sonarr_root_folder.errors.0}}
-            </div>
-            <div  class="valid-feedback">
-                {{form.sonarr_root_folder.help_text}}
-            </div>
-        </div>
+    </form>
 
-    </div></br>
-    <div class="d-grid gap-2 d-md-flex">
-        <input class="btn btn-success" type="submit" value="Save Configuration">
+    <!-- Radarr Instances -->
+    <h3>
+        Radarr Instances
+        <small class="text-muted">Configuration Options</small>
+    </h3>
+    
+    {% for form in radarr_forms %}
+    <div class="card mb-4 radarr-instance" id="radarr-instance-{{ form.prefix }}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Radarr Instance {% if form.prefix != 'radarr_new' %}{{ form.prefix|slice:"7:" }}{% else %}(New){% endif %}</h5>
+            {% if form.prefix != 'radarr_new' and radarr_forms|length > 1 %}
+                <form action="{% url 'home_view' %}" method="post" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="delete_radarr_{{ form.prefix|slice:"7:" }}">
+                    <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                </form>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <form action="{% url 'home_view' %}" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="{{ form.prefix }}">
+                
+                <div class="form-group">
+                    {% if form.non_field_errors.0 %}
+                        <div class="alert alert-warning" role="alert">
+                            {{ form.non_field_errors.0 }}
+                        </div>        
+                    {% endif %}
+                </div>
+                
+                <!-- Name field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.name.label_tag }}
+                    {{ form.name }}
+                    <div class="invalid-feedback">
+                        {{ form.name.errors.0 }}
+                    </div>
+                </div>
+                
+                <!-- URL field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.url.label_tag }}
+                    {{ form.url }}
+                    <div class="invalid-feedback">
+                        {{ form.url.errors.0 }}
+                    </div>
+                </div>
+                
+                <!-- API Key field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.apikey.label_tag }}
+                    {{ form.apikey }}
+                    <div class="invalid-feedback">
+                        {{ form.apikey.errors.0 }}
+                    </div>
+                    <div class="valid-feedback">
+                        {{ form.apikey.help_text }}
+                    </div>
+                </div>
+                
+                <!-- Quality Profile field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.quality_profile.label_tag }}
+                    {{ form.quality_profile }}
+                    <div class="invalid-feedback">
+                        {{ form.quality_profile.errors.0 }}
+                    </div>
+                    <div class="valid-feedback">
+                        {{ form.quality_profile.help_text }}
+                    </div>
+                </div>
+                
+                <!-- Root Folder field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.root_folder.label_tag }}
+                    {{ form.root_folder }}
+                    <div class="invalid-feedback">
+                        {{ form.root_folder.errors.0 }}
+                    </div>
+                    <div class="valid-feedback">
+                        {{ form.root_folder.help_text }}
+                    </div>
+                </div>
+                
+                <div class="d-grid gap-2 d-md-flex">
+                    <button type="submit" class="btn btn-success">Save</button>
+                    
+                    <!-- Test Connection button -->
+                    <button type="submit" name="form_type" value="test_radarr_{% if form.prefix != 'radarr_new' %}{{ form.prefix|slice:"7:" }}{% else %}new{% endif %}" class="btn btn-primary test-connection">
+                        Test Connection
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
+    {% endfor %}
+    
+    <!-- Add new Radarr instance button -->
+    <form action="{% url 'home_view' %}" method="get" class="mb-4">
+        <input type="hidden" name="add_radarr" value="1">
+        <button type="submit" class="btn btn-outline-primary">
+            <i class="bi bi-plus-circle"></i> Add Radarr Instance
+        </button>
+    </form>
+    
+    <!-- Sonarr Instances -->
+    <h3>
+        Sonarr Instances
+        <small class="text-muted">Configuration Options</small>
+    </h3>
+    
+    {% for form in sonarr_forms %}
+    <div class="card mb-4 sonarr-instance" id="sonarr-instance-{{ form.prefix }}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Sonarr Instance {% if form.prefix != 'sonarr_new' %}{{ form.prefix|slice:"7:" }}{% else %}(New){% endif %}</h5>
+            {% if form.prefix != 'sonarr_new' and sonarr_forms|length > 1 %}
+                <form action="{% url 'home_view' %}" method="post" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="delete_sonarr_{{ form.prefix|slice:"7:" }}">
+                    <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                </form>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <form action="{% url 'home_view' %}" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="{{ form.prefix }}">
+                
+                <div class="form-group">
+                    {% if form.non_field_errors.0 %}
+                        <div class="alert alert-warning" role="alert">
+                            {{ form.non_field_errors.0 }}
+                        </div>        
+                    {% endif %}
+                </div>
+                
+                <!-- Name field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.name.label_tag }}
+                    {{ form.name }}
+                    <div class="invalid-feedback">
+                        {{ form.name.errors.0 }}
+                    </div>
+                </div>
+                
+                <!-- URL field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.url.label_tag }}
+                    {{ form.url }}
+                    <div class="invalid-feedback">
+                        {{ form.url.errors.0 }}
+                    </div>
+                </div>
+                
+                <!-- API Key field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.apikey.label_tag }}
+                    {{ form.apikey }}
+                    <div class="invalid-feedback">
+                        {{ form.apikey.errors.0 }}
+                    </div>
+                    <div class="valid-feedback">
+                        {{ form.apikey.help_text }}
+                    </div>
+                </div>
+                
+                <!-- Quality Profile field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.quality_profile.label_tag }}
+                    {{ form.quality_profile }}
+                    <div class="invalid-feedback">
+                        {{ form.quality_profile.errors.0 }}
+                    </div>
+                    <div class="valid-feedback">
+                        {{ form.quality_profile.help_text }}
+                    </div>
+                </div>
+                
+                <!-- Root Folder field -->
+                <div class="fieldWrapper mb-3">
+                    {{ form.root_folder.label_tag }}
+                    {{ form.root_folder }}
+                    <div class="invalid-feedback">
+                        {{ form.root_folder.errors.0 }}
+                    </div>
+                    <div class="valid-feedback">
+                        {{ form.root_folder.help_text }}
+                    </div>
+                </div>
+                
+                <div class="d-grid gap-2 d-md-flex">
+                    <button type="submit" class="btn btn-success">Save</button>
+                    
+                    <!-- Test Connection button -->
+                    <button type="submit" name="form_type" value="test_sonarr_{% if form.prefix != 'sonarr_new' %}{{ form.prefix|slice:"7:" }}{% else %}new{% endif %}" class="btn btn-primary test-connection">
+                        Test Connection
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+    
+    <!-- Add new Sonarr instance button -->
+    <form action="{% url 'home_view' %}" method="get" class="mb-4">
+        <input type="hidden" name="add_sonarr" value="1">
+        <button type="submit" class="btn btn-outline-primary">
+            <i class="bi bi-plus-circle"></i> Add Sonarr Instance
+        </button>
     </form>
 
 </div>
 
+<!-- Optional: JavaScript to enhance the UI experience (can be moved to a separate JS file) -->
+<script>
+    // Enhance the test connection buttons with AJAX functionality if needed
+    document.addEventListener('DOMContentLoaded', function() {
+        // You could add JavaScript here to enhance the UI, like making test connection use AJAX
+        // instead of a full page reload, or having dynamic form field validation
+    });
+</script>
 {% endblock %}
