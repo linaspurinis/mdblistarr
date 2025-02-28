@@ -111,21 +111,18 @@ class MDBListarr():
         """
         try:
             if instance_id:
-                # Try to get the specific instance
                 instance = RadarrInstance.objects.filter(id=instance_id).first()
                 if instance and instance.quality_profile:
                     return instance.quality_profile
             
-            # If instance not found or quality profile is NULL, get the first available instance
             first_instance = RadarrInstance.objects.filter(quality_profile__isnull=False).first()
             if first_instance:
                 return first_instance.quality_profile
             
-            # If no instances have a quality profile set, return a default
-            return 0  # Or another appropriate default value
+            return 0  
         except Exception as e:
             logger.error(f"Error getting Radarr quality profile: {str(e)}")
-            return 0  # Default value on error
+            return 0 
             
     def get_radarr_root_folder(self, instance_id=None):
         """
@@ -134,21 +131,18 @@ class MDBListarr():
         """
         try:
             if instance_id:
-                # Try to get the specific instance
                 instance = RadarrInstance.objects.filter(id=instance_id).first()
                 if instance and instance.root_folder:
                     return instance.root_folder
             
-            # If instance not found or root folder is NULL, get the first available instance
             first_instance = RadarrInstance.objects.filter(root_folder__isnull=False).first()
             if first_instance:
                 return first_instance.root_folder
             
-            # If no instances have a root folder set, return a default
-            return ""  # Or another appropriate default value
+            return ""  
         except Exception as e:
             logger.error(f"Error getting Radarr root folder: {str(e)}")
-            return ""  # Default value on error
+            return "" 
 
     def get_sonarr_quality_profile(self, instance_id=None):
         """
@@ -157,21 +151,18 @@ class MDBListarr():
         """
         try:
             if instance_id:
-                # Try to get the specific instance
                 instance = SonarrInstance.objects.filter(id=instance_id).first()
                 if instance and instance.quality_profile:
                     return instance.quality_profile
             
-            # If instance not found or quality profile is NULL, get the first available instance
             first_instance = SonarrInstance.objects.filter(quality_profile__isnull=False).first()
             if first_instance:
                 return first_instance.quality_profile
             
-            # If no instances have a quality profile set, return a default
-            return 0  # Or another appropriate default value
+            return 0 
         except Exception as e:
             logger.error(f"Error getting Radarr quality profile: {str(e)}")
-            return 0  # Default value on error
+            return 0  
             
     def get_sonarr_root_folder(self, instance_id=None):
         """
@@ -180,21 +171,18 @@ class MDBListarr():
         """
         try:
             if instance_id:
-                # Try to get the specific instance
                 instance = SonarrInstance.objects.filter(id=instance_id).first()
                 if instance and instance.root_folder:
                     return instance.root_folder
             
-            # If instance not found or root folder is NULL, get the first available instance
             first_instance = SonarrInstance.objects.filter(root_folder__isnull=False).first()
             if first_instance:
                 return first_instance.root_folder
             
-            # If no instances have a root folder set, return a default
-            return ""  # Or another appropriate default value
+            return "" 
         except Exception as e:
             logger.error(f"Error getting Radarr root folder: {str(e)}")
-            return ""  # Default value on error
+            return ""  
 
 
 mdblistarr = MDBListarr()
@@ -252,18 +240,14 @@ class RadarrInstanceForm(forms.ModelForm):
         self.fields['quality_profile'].choices = [('0', 'Select Quality Profile')]
         self.fields['root_folder'].choices = [('0', 'Select Root Folder')]
         
-        # If instance exists and has URL and API key, fetch profiles and root folders
         if self.instance and self.instance.pk and self.instance.url and self.instance.apikey:
             try:
-                # Try to get existing quality profiles and root folders
                 quality_choices = mdblistarr.get_radarr_quality_profile_choices(self.instance.url, self.instance.apikey)
                 root_choices = mdblistarr.get_radarr_root_folder_choices(self.instance.url, self.instance.apikey)
                 
-                # Set choices
                 self.fields['quality_profile'].choices = quality_choices
                 self.fields['root_folder'].choices = root_choices
                 
-                # Make sure saved values are in choices
                 if self.instance.quality_profile and not any(str(self.instance.quality_profile) == choice[0] for choice in quality_choices):
                     self.fields['quality_profile'].choices.append((self.instance.quality_profile, f"Profile {self.instance.quality_profile} (saved)"))
                 
@@ -290,18 +274,14 @@ class SonarrInstanceForm(forms.ModelForm):
         self.fields['quality_profile'].choices = [('0', 'Select Quality Profile')]
         self.fields['root_folder'].choices = [('0', 'Select Root Folder')]
         
-        # If instance exists and has URL and API key, fetch profiles and root folders
         if self.instance and self.instance.pk and self.instance.url and self.instance.apikey:
             try:
-                # Try to get existing quality profiles and root folders
                 quality_choices = mdblistarr.get_sonarr_quality_profile_choices(self.instance.url, self.instance.apikey)
                 root_choices = mdblistarr.get_sonarr_root_folder_choices(self.instance.url, self.instance.apikey)
                 
-                # Set choices
                 self.fields['quality_profile'].choices = quality_choices
                 self.fields['root_folder'].choices = root_choices
                 
-                # Make sure saved values are in choices
                 if self.instance.quality_profile and not any(str(self.instance.quality_profile) == choice[0] for choice in quality_choices):
                     self.fields['quality_profile'].choices.append((self.instance.quality_profile, f"Profile {self.instance.quality_profile} (saved)"))
                 
@@ -311,14 +291,11 @@ class SonarrInstanceForm(forms.ModelForm):
                 logger.error(f"Error initializing SonarrInstanceForm: {str(e)}")
 
 def home_view(request):
-    # Handle MDBList configuration
     mdblist_form = MDBListForm(initial={'mdblist_apikey': mdblistarr.mdblist_apikey})
     
-    # Get all existing Radarr and Sonarr instances
     radarr_instances = RadarrInstance.objects.all()
     sonarr_instances = SonarrInstance.objects.all()
     
-    # Set up server selection forms
     radarr_choices = [('new', '--- Add New Radarr Server ---')]
     radarr_choices.extend([(str(instance.id), instance.name) for instance in radarr_instances])
     
@@ -328,19 +305,15 @@ def home_view(request):
     radarr_selection_form = ServerSelectionForm(choices=radarr_choices, prefix='radarr_select')
     sonarr_selection_form = ServerSelectionForm(choices=sonarr_choices, prefix='sonarr_select')
     
-    # Default to empty forms for new servers
     radarr_form = RadarrInstanceForm()
     sonarr_form = SonarrInstanceForm()
     
-    # Track which forms to show
     active_radarr_id = None
     active_sonarr_id = None
     
-    # Handle form submissions
     if request.method == "POST":
         form_type = request.POST.get('form_type', '')
         
-        # Handle MDBList API key form
         if form_type == 'mdblist':
             mdblist_form = MDBListForm(request.POST)
             if mdblist_form.is_valid():
@@ -352,7 +325,6 @@ def home_view(request):
                 messages.success(request, "MDBList configuration saved successfully!")
                 return HttpResponseRedirect(reverse('home_view'))
         
-        # Handle Radarr server selection
         elif form_type == 'radarr_select':
             radarr_selection_form = ServerSelectionForm(request.POST, choices=radarr_choices, prefix='radarr_select')
             if radarr_selection_form.is_valid():
@@ -364,7 +336,6 @@ def home_view(request):
                 else:
                     radarr_form = RadarrInstanceForm()
         
-        # Handle Sonarr server selection
         elif form_type == 'sonarr_select':
             sonarr_selection_form = ServerSelectionForm(request.POST, choices=sonarr_choices, prefix='sonarr_select')
             if sonarr_selection_form.is_valid():
@@ -376,72 +347,58 @@ def home_view(request):
                 else:
                     sonarr_form = SonarrInstanceForm()
         
-        # Handle Radarr instance save
         elif form_type == 'radarr_save':
             instance_id = request.POST.get('instance_id')
             
             if instance_id and instance_id != 'new':
-                # Edit existing instance
                 instance = get_object_or_404(RadarrInstance, id=instance_id)
                 radarr_form = RadarrInstanceForm(request.POST, instance=instance)
                 active_radarr_id = instance_id
             else:
-                # New instance
                 radarr_form = RadarrInstanceForm(request.POST)
             
             if radarr_form.is_valid():
                 instance = radarr_form.save(commit=False)
                 
-                # Test connection before saving
                 connection = mdblistarr.test_radarr_connection(instance.url, instance.apikey)
                 
                 if connection['status']:
-                    # Connection successful, save the instance
                     instance.save()
                     messages.success(request, "Radarr configuration saved successfully!")
                     return HttpResponseRedirect(reverse('home_view'))
                 else:
-                    # Connection failed, show error
                     radarr_form.add_error('apikey', 'Unable to connect to Radarr')
                     radarr_form.fields['apikey'].widget.attrs.update({'class': 'form-control is-invalid'})
         
-        # Handle Sonarr instance save
         elif form_type == 'sonarr_save':
             instance_id = request.POST.get('instance_id')
             
             if instance_id and instance_id != 'new':
-                # Edit existing instance
                 instance = get_object_or_404(SonarrInstance, id=instance_id)
                 sonarr_form = SonarrInstanceForm(request.POST, instance=instance)
                 active_sonarr_id = instance_id
             else:
-                # New instance
                 sonarr_form = SonarrInstanceForm(request.POST)
             
             if sonarr_form.is_valid():
                 instance = sonarr_form.save(commit=False)
                 
-                # Test connection before saving
                 connection = mdblistarr.test_sonarr_connection(instance.url, instance.apikey)
                 
                 if connection['status']:
-                    # Connection successful, save the instance
                     instance.save()
                     messages.success(request, "Sonarr configuration saved successfully!")
                     return HttpResponseRedirect(reverse('home_view'))
                 else:
-                    # Connection failed, show error
                     sonarr_form.add_error('apikey', 'Unable to connect to Sonarr')
                     sonarr_form.fields['apikey'].widget.attrs.update({'class': 'form-control is-invalid'})
         
-        # Handle Radarr instance deletion
         elif form_type == 'radarr_delete':
             instance_id = request.POST.get('instance_id')
             if instance_id:
                 RadarrInstance.objects.filter(id=instance_id).delete()
                 return HttpResponseRedirect(reverse('home_view'))
         
-        # Handle Sonarr instance deletion
         elif form_type == 'sonarr_delete':
             instance_id = request.POST.get('instance_id')
             if instance_id:
@@ -449,13 +406,11 @@ def home_view(request):
                 return HttpResponseRedirect(reverse('home_view'))
         
 
-    # Set selected values in dropdowns
     if active_radarr_id:
         radarr_selection_form.initial = {'server_selection': active_radarr_id}
     if active_sonarr_id:
         sonarr_selection_form.initial = {'server_selection': active_sonarr_id}
     
-    # Prepare context for template
     context = {
         'mdblist_form': mdblist_form,
         'radarr_selection_form': radarr_selection_form,

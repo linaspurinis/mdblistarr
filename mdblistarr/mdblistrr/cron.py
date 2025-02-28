@@ -92,7 +92,7 @@ def post_sonarr_payload():
 def get_mdblist_queue_to_arr():
 
     try:
-        # time.sleep(random.uniform(0.0, 36.0))
+        time.sleep(random.uniform(0.0, 36.0))
         mdblistarr = MDBListarr()
         queue = mdblistarr.mdblist.get_mdblist_queue()
 
