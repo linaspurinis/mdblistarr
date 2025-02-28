@@ -5,8 +5,10 @@ import time
 import json
 import random
 import traceback
-from .models import Log, InstanceChangeLog
+from .models import Log, InstanceChangeLog, RadarrInstance, SonarrInstance
 from .views import MDBListarr
+from .arr import SonarrAPI
+from .arr import RadarrAPI
 
 def save_log(provider, status, text):
     log = Log()
@@ -20,7 +22,8 @@ def post_radarr_payload():
     try:
         time.sleep(random.uniform(0.0, 3600.0))
         mdblistarr = MDBListarr()
-        movies = mdblistarr.radarr.get_movies()
+        radarr_api = RadarrAPI()
+        movies = radarr_api.get_movies()
 
         provider = 1 # Radarr JSON POST
 
@@ -39,8 +42,8 @@ def post_radarr_payload():
 
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
 
-        if res['response'] == 'Ok':
-            save_log(provider, 1, f'Uploaded {total_records} records to MDBList.com')
+        if res.get('response') == 'Ok':
+            save_log(provider, 1, f'{radarr_api.name}: Uploaded {total_records} records to MDBList.com')
             return JsonResponse(res)
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
@@ -53,7 +56,8 @@ def post_sonarr_payload():
     try:
         time.sleep(random.uniform(0.0, 3600.0))
         mdblistarr = MDBListarr()
-        series = mdblistarr.sonarr.get_series()
+        sonarr_api = SonarrAPI()
+        series = sonarr_api.get_series()
 
         provider = 2 # Sonarr JSON POST
 
@@ -75,8 +79,8 @@ def post_sonarr_payload():
         json_payload = {'sonarr': json}
 
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
-        if res['response'] == 'Ok':
-            save_log(provider, 1, f'Uploaded {total_records} records to MDBList.com')
+        if res.get('response') == 'Ok':
+            save_log(provider, 1, f'{sonarr_api.name}: Uploaded {total_records} records to MDBList.com')
             return JsonResponse(res)
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
@@ -88,25 +92,25 @@ def post_sonarr_payload():
 def get_mdblist_queue_to_arr():
 
     try:
-        time.sleep(random.uniform(0.0, 36.0))
+        # time.sleep(random.uniform(0.0, 36.0))
         mdblistarr = MDBListarr()
         queue = mdblistarr.mdblist.get_mdblist_queue()
 
         for item in queue:
             if item['mediatype'] == 'movie':
                 provider = 1
-                instanceid = item.get('instanceid')
+                instance_id = item.get('instanceid')
                 movie_request_json = {
                     "title": item['title'],
                     "tmdbid": item['tmdbid'],
                     "monitored": True, 
                     "addOptions": {"searchForMovie": True},
-                    "qualityProfileId": mdblistarr.get_radarr_quality_profile(instanceid),
-                    "rootFolderPath": mdblistarr.get_radarr_root_folder(instanceid)
+                    "qualityProfileId": mdblistarr.get_radarr_quality_profile(instance_id),
+                    "rootFolderPath": mdblistarr.get_radarr_root_folder(instance_id)
                 }
-                return JsonResponse({'result': 200})
 
-                res = mdblistarr.radarr.post_movie(movie_request_json)
+                radarr_api = RadarrAPI(instance_id=instance_id)
+                res = radarr_api.post_movie(movie_request_json)
                 if isinstance(res, list):
                     if res[0].get('errorMessage'):
                         save_log(provider, 2, f"Error adding movie to Radarr: {item['title']}. {res[0]['errorMessage']}.")
@@ -118,15 +122,18 @@ def get_mdblist_queue_to_arr():
                     save_log(provider, 2, f"Error posting movie to Radarr")
             elif item['mediatype'] == 'show':
                 provider = 2
+                instanceid = item.get('instanceid')
                 show_request_json = {
                     "title": item['title'],
                     "tvdbid": item['tvdbid'],
                     "monitored": True, 
                     "addOptions": {"searchForMissingEpisodes": True},
-                    "qualityProfileId": mdblistarr.sonarr_quality_profile,
-                    "rootFolderPath": mdblistarr.sonarr_root_folder
+                    "qualityProfileId": mdblistarr.get_sonarr_quality_profile(instance_id),
+                    "rootFolderPath": mdblistarr.get_sonarr_root_folder(instance_id)
                 }
-                res = mdblistarr.sonarr.post_show(show_request_json)
+
+                sonarr_api = SonarrAPI(instance_id=instance_id)
+                res = sonarr_api.post_show(show_request_json)
                 if isinstance(res, list):
                     if res[0].get('errorMessage'):
                         save_log(provider, 2, f"Error adding show to Sonarr: {item['title']}. {res[0]['errorMessage']}")
@@ -143,30 +150,50 @@ def get_mdblist_queue_to_arr():
     return JsonResponse({'result': 200})
 
 def process_instance_changes():
-    provider = 3 # Instance Change Log
-    logs = InstanceChangeLog.objects.filter(processed=False).order_by('timestamp')
-    json_payload = {
-        'changes': [
-            {
-                'instance_type': log.instance_type,
-                'instance_id': log.instance_id,
-                'event_type': log.event_type,
-                'old_value': log.old_value,
-                'new_value': log.new_value,
-                'timestamp': log.timestamp.isoformat()
-            } for log in logs
-        ]
-    }
-    if not json_payload["changes"]:  # No changes to process
-        return JsonResponse({"response": "No pending changes"})
+    try:
+        provider = 3  # Instance Change Log
+        logs = InstanceChangeLog.objects.filter(processed=False).order_by('timestamp')
 
-    mdblistarr = MDBListarr()
-    res = mdblistarr.mdblist.post_arr_changes(json.dumps(json_payload))
+        if not logs.exists():
+            return JsonResponse({"response": "Log is empty"})
 
-    if res.get('response') == 'Ok':
-        logs.update(processed=True)
-        save_log(provider, 1, f'Configuration uploaded to MDBList.com')
-        return JsonResponse(res)
-    else:
-        save_log(provider, 2, f'Configuration upload to MDBList.com Failed: {res}')
-        return JsonResponse(res)
+        time.sleep(random.uniform(0.0, 36.0))
+
+        radarr_instances = RadarrInstance.objects.all()
+        sonarr_instances = SonarrInstance.objects.all()
+        
+        json_payload = {
+            "instances": {
+                "radarr": [
+                    {
+                        "instance_id": radarr.id,
+                        "instance_name": radarr.name,
+                    } for radarr in radarr_instances
+                ],
+                "sonarr": [
+                    {
+                        "instance_id": sonarr.id,
+                        "instance_name": sonarr.name,
+                    } for sonarr in sonarr_instances
+                ]
+            }
+        }
+        
+        if not radarr_instances and not sonarr_instances:
+            logs.update(processed=True)
+            return JsonResponse({"response": "No instances to sync"})
+            
+        mdblistarr = MDBListarr()
+        res = mdblistarr.mdblist.post_arr_changes(json_payload)
+        
+        if res.get('response') == 'Ok':
+            logs.update(processed=True)
+            save_log(provider, 1, f'Configuration uploaded to MDBList.com')
+            return JsonResponse(res)
+        else:
+            save_log(provider, 2, f'Configuration upload to MDBList.com Failed: {res}')
+            return JsonResponse(res)
+    except Exception as e:
+        save_log(provider, 2, f'{traceback.format_exc()}')
+        return JsonResponse({'result': 500})
+

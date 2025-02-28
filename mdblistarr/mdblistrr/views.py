@@ -150,6 +150,53 @@ class MDBListarr():
             logger.error(f"Error getting Radarr root folder: {str(e)}")
             return ""  # Default value on error
 
+    def get_sonarr_quality_profile(self, instance_id=None):
+        """
+        Get quality profile ID for a Radarr instance.
+        Returns the quality profile ID of the specified instance or the first available instance if not found.
+        """
+        try:
+            if instance_id:
+                # Try to get the specific instance
+                instance = SonarrInstance.objects.filter(id=instance_id).first()
+                if instance and instance.quality_profile:
+                    return instance.quality_profile
+            
+            # If instance not found or quality profile is NULL, get the first available instance
+            first_instance = SonarrInstance.objects.filter(quality_profile__isnull=False).first()
+            if first_instance:
+                return first_instance.quality_profile
+            
+            # If no instances have a quality profile set, return a default
+            return 0  # Or another appropriate default value
+        except Exception as e:
+            logger.error(f"Error getting Radarr quality profile: {str(e)}")
+            return 0  # Default value on error
+            
+    def get_sonarr_root_folder(self, instance_id=None):
+        """
+        Get root folder path for a Radarr instance.
+        Returns the root folder path of the specified instance or the first available instance if not found.
+        """
+        try:
+            if instance_id:
+                # Try to get the specific instance
+                instance = SonarrInstance.objects.filter(id=instance_id).first()
+                if instance and instance.root_folder:
+                    return instance.root_folder
+            
+            # If instance not found or root folder is NULL, get the first available instance
+            first_instance = SonarrInstance.objects.filter(root_folder__isnull=False).first()
+            if first_instance:
+                return first_instance.root_folder
+            
+            # If no instances have a root folder set, return a default
+            return ""  # Or another appropriate default value
+        except Exception as e:
+            logger.error(f"Error getting Radarr root folder: {str(e)}")
+            return ""  # Default value on error
+
+
 mdblistarr = MDBListarr()
 
 class MDBListForm(forms.Form):
