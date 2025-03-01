@@ -62,10 +62,11 @@ def post_sonarr_payload():
                 exists = None
                 if show.get('seasons'):
                     for season in show['seasons']:
-                        if season.get('statistics').get('percentOfEpisodes'):
-                            if season['statistics']['percentOfEpisodes'] == 100:
-                                # At least one season is downloaded 100%
-                                exists = True
+                        if season.get('statistics'):
+                            if season.get('statistics').get('percentOfEpisodes'):
+                                if season['statistics']['percentOfEpisodes'] == 100:
+                                    # At least one season is downloaded 100%
+                                    exists = True
                 elif show['monitored']:
                     exists = False
                 if exists is not None:
