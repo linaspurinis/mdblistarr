@@ -8,7 +8,7 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr and Sonar
 
 ## App Configuration Screen
 
-<img src="https://github.com/linaspurinis/mdblist.doc/raw/main/assets/images/mdblistarr-config-screen.png" width="60%">
+![image](https://github.com/user-attachments/assets/cdd58b1a-4b55-464d-84dd-55246ba6a096)
 
 ## MDBListarr v2-beta
 
