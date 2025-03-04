@@ -10,7 +10,7 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr and Sonar
 
 ![image](https://github.com/user-attachments/assets/cdd58b1a-4b55-464d-84dd-55246ba6a096)
 
-## MDBListarr v2-beta
+## MDBListarr
 
 ```sh
 git clone --branch v2-beta git@github.com:linaspurinis/mdblistarr.git
