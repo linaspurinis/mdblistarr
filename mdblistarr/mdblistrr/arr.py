@@ -72,8 +72,8 @@ class SonarrAPI():
     def post_show(self, payload):
         try:
             return self.connect.post_json(f"{self.url}/api/v3/series", json=payload, params={"apikey": self.apikey})
-        except Exception as e:
-            return {'response': f'Error: {traceback.format_exc()}'}
+        except Exception:
+            return {'errorMessage': traceback.format_exc()}
 
 class RadarrAPI():
     def __init__(self, url=None, apikey=None, instance_id=None):
@@ -143,8 +143,8 @@ class RadarrAPI():
     def post_movie(self, payload):
         try:
             return self.connect.post_json(f"{self.url}/api/v3/movie", json=payload, params={"apikey": self.apikey})
-        except Exception as e:
-            return {'response': f'Error: {traceback.format_exc()}'}
+        except Exception:
+            return {'errorMessage': traceback.format_exc()}
 
 class MdblistAPI():
     def __init__(self, apikey):

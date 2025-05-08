@@ -116,6 +116,8 @@ def get_mdblist_queue_to_arr():
                         save_log(provider, 2, f"Error posting movie to Radarr")
                 elif res.get('title'):
                     save_log(provider, 1, f"Added movie to Radarr: {item['title']}.")
+                elif res.get('errorMessage'):
+                    save_log(provider, 2, f"Error posting show to Radarr: {item['title']}. {res['errorMessage']}")
                 else:
                     save_log(provider, 2, f"Error posting movie to Radarr")
             elif item['mediatype'] == 'show':
@@ -139,6 +141,8 @@ def get_mdblist_queue_to_arr():
                         save_log(provider, 2, f"Error posting show to Sonarr")
                 elif res.get('title'):
                     save_log(provider, 1, f"Added show to Sonarr {item['title']}.")
+                elif res.get('errorMessage'):
+                    save_log(provider, 2, f"Error posting show to Sonarr: {item['title']}. {res['errorMessage']}")
                 else:
                     save_log(provider, 2, f"Error posting show to Sonarr")
     except:
