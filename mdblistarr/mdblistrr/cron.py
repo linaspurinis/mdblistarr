@@ -117,7 +117,7 @@ def get_mdblist_queue_to_arr():
                 elif res.get('title'):
                     save_log(provider, 1, f"Added movie to Radarr: {item['title']}.")
                 elif res.get('errorMessage'):
-                    save_log(provider, 2, f"Error posting show to Radarr: {item['title']}. {res['errorMessage']}")
+                    save_log(provider, 2, f"Error posting movie to Radarr: {item['title']}. {res['errorMessage']}")
                 else:
                     save_log(provider, 2, f"Error posting movie to Radarr")
             elif item['mediatype'] == 'show':
