@@ -113,7 +113,9 @@ def get_mdblist_queue_to_arr():
                     if res[0].get('errorMessage'):
                         save_log(provider, 2, f"Error adding movie to Radarr: {item['title']}. {res[0]['errorMessage']}.")
                     else:
-                        save_log(provider, 2, f"Error posting movie to Radarr")
+                        save_log(provider, 2, f"Error posting movie to Radarr: {item['title']}. Raw response: {res}")
+                        print(f"Error posting movie to Radarr: {item['title']}. Raw response: {res}")  # Print to console
+                        # save_log(provider, 2, f"Error posting movie to Radarr")
                 elif res.get('title'):
                     save_log(provider, 1, f"Added movie to Radarr: {item['title']}.")
                 elif res.get('errorMessage'):
@@ -141,7 +143,9 @@ def get_mdblist_queue_to_arr():
                     if res[0].get('errorMessage'):
                         save_log(provider, 2, f"Error adding show to Sonarr: {item['title']}. {res[0]['errorMessage']}")
                     else:
-                        save_log(provider, 2, f"Error posting show to Sonarr")
+                        save_log(provider, 2, f"Error posting show to Sonarr: {item['title']}. Raw response: {res}")
+                        print(f"Error posting show to Sonarr: {item['title']}. Raw response: {res}")  # Print to console
+                        # save_log(provider, 2, f"Error posting show to Sonarr")
                 elif res.get('title'):
                     save_log(provider, 1, f"Added show to Sonarr {item['title']}.")
                 elif res.get('errorMessage'):
