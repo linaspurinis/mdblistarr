@@ -127,7 +127,7 @@ def get_mdblist_queue_to_arr():
                     # save_log(provider, 2, f"Error posting movie to Radarr")
             elif item['mediatype'] == 'show':
                 provider = 2
-                instanceid = item.get('instanceid')
+                instance_id = item.get('instanceid')
                 show_request_json = {
                     "title": item['title'],
                     "tvdbid": item['tvdbid'],
