@@ -8,5 +8,6 @@ urlpatterns = [
     path('log', log_view, name='log_view'),
     # URLs for AJAX test connection endpoints
     path('test_radarr_connection/', views.test_radarr_connection, name='test_radarr_connection'),
-    path('test_sonarr_connection/', views.test_sonarr_connection, name='test_sonarr_connection'),    
+    path('test_sonarr_connection/', views.test_sonarr_connection, name='test_sonarr_connection'),
+    path('set_active_tab/', views.set_active_tab, name='set_active_tab'),
 ]

@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpResponseRedirect
 from django import forms
 from django.urls import reverse
@@ -146,6 +147,12 @@ def home_view(request):
     
     if request.method == "POST":
         form_type = request.POST.get('form_type', '')
+        if form_type.startswith('mdblist'):
+            request.session['active_tab'] = 'mdblist'
+        elif form_type.startswith('radarr'):
+            request.session['active_tab'] = 'radarr'
+        elif form_type.startswith('sonarr'):
+            request.session['active_tab'] = 'sonarr'
         
         if form_type == 'mdblist':
             mdblist_form = MDBListForm(request.POST)
@@ -257,6 +264,7 @@ def home_view(request):
         'sonarr_form': sonarr_form,
         'active_radarr_id': active_radarr_id,
         'active_sonarr_id': active_sonarr_id,
+        'active_tab': request.session.get('active_tab', 'mdblist'),
     }
     
     return render(request, "index.html", context)
@@ -316,3 +324,16 @@ def test_sonarr_connection(request):
             })
     
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+
+
+@require_POST
+def set_active_tab(request):
+    try:
+        data = json.loads(request.body)
+        tab = data.get("tab")
+        if tab in {"mdblist", "radarr", "sonarr"}:
+            request.session["active_tab"] = tab
+            return JsonResponse({"status": "ok"})
+    except json.JSONDecodeError:
+        pass
+    return JsonResponse({"status": "error", "message": "Invalid tab"}, status=400)

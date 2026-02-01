@@ -13,262 +13,295 @@
         {% endfor %}
     {% endif %}
     
-    <!-- MDBList Configuration -->
-    <form action="{% url 'home_view' %}" method="post">
-        {% csrf_token %}
-        <input type="hidden" name="form_type" value="mdblist">
-        <div class="form-group">
-            {% if mdblist_form.non_field_errors %}
-                <div class="alert alert-warning" role="alert">
-                    {{ mdblist_form.non_field_errors }}
-                </div>        
-            {% endif %}
-            <p></p>
+    <ul class="nav nav-tabs" id="configTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab == 'mdblist' %}active{% endif %}" id="mdblist-tab" data-bs-toggle="tab" data-bs-target="#mdblist-pane" type="button" role="tab" aria-controls="mdblist-pane" aria-selected="{% if active_tab == 'mdblist' %}true{% else %}false{% endif %}">MDBList</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab == 'radarr' %}active{% endif %}" id="radarr-tab" data-bs-toggle="tab" data-bs-target="#radarr-pane" type="button" role="tab" aria-controls="radarr-pane" aria-selected="{% if active_tab == 'radarr' %}true{% else %}false{% endif %}">Radarr</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab == 'sonarr' %}active{% endif %}" id="sonarr-tab" data-bs-toggle="tab" data-bs-target="#sonarr-pane" type="button" role="tab" aria-controls="sonarr-pane" aria-selected="{% if active_tab == 'sonarr' %}true{% else %}false{% endif %}">Sonarr</button>
+        </li>
+    </ul>
+    <div class="tab-content pt-3" id="configTabsContent">
+        <div class="tab-pane fade {% if active_tab == 'mdblist' %}show active{% endif %}" id="mdblist-pane" role="tabpanel" aria-labelledby="mdblist-tab" tabindex="0">
+            <!-- MDBList Configuration -->
+            <form action="{% url 'home_view' %}" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="mdblist">
+                <div class="form-group">
+                    {% if mdblist_form.non_field_errors %}
+                        <div class="alert alert-warning" role="alert">
+                            {{ mdblist_form.non_field_errors }}
+                        </div>
+                    {% endif %}
+                    <p></p>
+                    <h3>
+                        MDBList
+                        <small class="text-muted">Configuration Options</small>
+                    </h3>
+                    <div class="fieldWrapper mb-3">
+                        {{ mdblist_form.mdblist_apikey.label_tag }}
+                        {{ mdblist_form.mdblist_apikey }}
+                        <div class="invalid-feedback">
+                            {{ mdblist_form.mdblist_apikey.errors.0 }}
+                        </div>
+                        <div class="valid-feedback">
+                            {% if not mdblist_form.errors %}API key validated successfully{% else %}{{ mdblist_form.mdblist_apikey.help_text }}{% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="d-grid gap-2 d-md-flex mb-4">
+                    <input class="btn btn-success" type="submit" value="Save MDBList Configuration">
+                </div>
+            </form>
+        </div>
+        <div class="tab-pane fade {% if active_tab == 'radarr' %}show active{% endif %}" id="radarr-pane" role="tabpanel" aria-labelledby="radarr-tab" tabindex="0">
+            <!-- Radarr Configuration -->
             <h3>
-                MDBList
+                Radarr
                 <small class="text-muted">Configuration Options</small>
-            </h3>        
-            <div class="fieldWrapper mb-3">
-                {{ mdblist_form.mdblist_apikey.label_tag }}
-                {{ mdblist_form.mdblist_apikey }}
-                <div class="invalid-feedback">
-                    {{ mdblist_form.mdblist_apikey.errors.0 }}
-                </div>
-                <div class="valid-feedback">
-                    {% if not mdblist_form.errors %}API key validated successfully{% else %}{{ mdblist_form.mdblist_apikey.help_text }}{% endif %}
-                </div>
-            </div>
-        </div>
-        <div class="d-grid gap-2 d-md-flex mb-4">
-            <input class="btn btn-success" type="submit" value="Save MDBList Configuration">
-        </div>
-    </form>
+            </h3>
 
-    <!-- Radarr Configuration -->
-    <h3>
-        Radarr
-        <small class="text-muted">Configuration Options</small>
-    </h3>
-    
-    <!-- Radarr Server Selection -->
-    <form action="{% url 'home_view' %}" method="post" class="mb-3">
-        {% csrf_token %}
-        <input type="hidden" name="form_type" value="radarr_select">
-        <div class="form-group">
-            <div class="fieldWrapper mb-3">
-                {{ radarr_selection_form.server_selection.label_tag }}
-                {{ radarr_selection_form.server_selection }}
-            </div>
-        </div>
-        <div class="d-grid gap-2 d-md-flex mb-4">
-            <input class="btn btn-primary" type="submit" value="Select Radarr Server">
-        </div>
-    </form>
-    
-    <!-- Radarr Instance Form -->
-    {% if radarr_form %}
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">Radarr Server Configuration</h5>
-        </div>
-        <div class="card-body">
-            <form action="{% url 'home_view' %}" method="post">
+            <!-- Radarr Server Selection -->
+            <form action="{% url 'home_view' %}" method="post" class="mb-3">
                 {% csrf_token %}
-                <input type="hidden" name="form_type" value="radarr_save">
-                <input type="hidden" name="instance_id" value="{{ active_radarr_id|default:'new' }}">
-                
-                {% if radarr_form.non_field_errors %}
-                    <div class="alert alert-warning" role="alert">
-                        {{ radarr_form.non_field_errors }}
-                    </div>        
-                {% endif %}
-                
-                <!-- Name field -->
-                <div class="fieldWrapper mb-3">
-                    {{ radarr_form.name.label_tag }}
-                    {{ radarr_form.name }}
-                    <div class="invalid-feedback">
-                        {{ radarr_form.name.errors.0 }}
+                <input type="hidden" name="form_type" value="radarr_select">
+                <div class="form-group">
+                    <div class="fieldWrapper mb-3">
+                        {{ radarr_selection_form.server_selection.label_tag }}
+                        {{ radarr_selection_form.server_selection }}
                     </div>
                 </div>
-                
-                <!-- URL field -->
-                <div class="fieldWrapper mb-3">
-                    {{ radarr_form.url.label_tag }}
-                    {{ radarr_form.url }}
-                    <div class="invalid-feedback">
-                        {{ radarr_form.url.errors.0 }}
-                    </div>
-                </div>
-                
-                <!-- API Key field -->
-                <div class="fieldWrapper mb-3">
-                    {{ radarr_form.apikey.label_tag }}
-                    {{ radarr_form.apikey }}
-                    <div class="invalid-feedback">
-                        {{ radarr_form.apikey.errors.0 }}
-                    </div>
-                    <div class="valid-feedback">
-                        {{ radarr_form.apikey.help_text }}
-                    </div>
-                </div>
-                
-                <!-- Quality Profile field -->
-                <div class="fieldWrapper mb-3">
-                    {{ radarr_form.quality_profile.label_tag }}
-                    <select name="quality_profile" id="id_quality_profile" class="form-control">
-                        {% for value, text in radarr_form.fields.quality_profile.choices %}
-                            <option value="{{ value }}" {% if value == radarr_form.instance.quality_profile %}selected="selected"{% endif %}>
-                                {{ text }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                    <div class="invalid-feedback">
-                        {{ radarr_form.quality_profile.errors.0 }}
-                    </div>
-                </div>
-                
-                <!-- Root Folder field -->
-                <div class="fieldWrapper mb-3">
-                    {{ radarr_form.root_folder.label_tag }}
-                    <select name="root_folder" id="id_root_folder" class="form-control">
-                        {% for value, text in radarr_form.fields.root_folder.choices %}
-                            <option value="{{ value }}" {% if value == radarr_form.instance.root_folder %}selected="selected"{% endif %}>
-                                {{ text }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                    <div class="invalid-feedback">
-                        {{ radarr_form.root_folder.errors.0 }}
-                    </div>
-                </div>
-                
-                <div class="d-grid gap-2 d-md-flex">
-                    <button type="submit" class="btn btn-success">Save</button>
-                    <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="test_radarr" class="btn btn-primary">Test Connection</button>
-                    {% if active_radarr_id %}
-                    <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="radarr_delete" class="btn btn-danger">Delete</button>
-                    {% endif %}
+                <div class="d-grid gap-2 d-md-flex mb-4">
+                    <input class="btn btn-primary" type="submit" value="Select Radarr Server">
                 </div>
             </form>
-        </div>
-    </div>
-    {% endif %}
-    
-    <!-- Sonarr Configuration -->
-    <h3>
-        Sonarr
-        <small class="text-muted">Configuration Options</small>
-    </h3>
-    
-    <!-- Sonarr Server Selection -->
-    <form action="{% url 'home_view' %}" method="post" class="mb-3">
-        {% csrf_token %}
-        <input type="hidden" name="form_type" value="sonarr_select">
-        <div class="form-group">
-            <div class="fieldWrapper mb-3">
-                {{ sonarr_selection_form.server_selection.label_tag }}
-                {{ sonarr_selection_form.server_selection }}
+
+            <!-- Radarr Instance Form -->
+            {% if radarr_form %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Radarr Server Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form action="{% url 'home_view' %}" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="form_type" value="radarr_save">
+                        <input type="hidden" name="instance_id" value="{{ active_radarr_id|default:'new' }}">
+
+                        {% if radarr_form.non_field_errors %}
+                            <div class="alert alert-warning" role="alert">
+                                {{ radarr_form.non_field_errors }}
+                            </div>
+                        {% endif %}
+
+                        <!-- Name field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ radarr_form.name.label_tag }}
+                            {{ radarr_form.name }}
+                            <div class="invalid-feedback">
+                                {{ radarr_form.name.errors.0 }}
+                            </div>
+                        </div>
+
+                        <!-- URL field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ radarr_form.url.label_tag }}
+                            {{ radarr_form.url }}
+                            <div class="invalid-feedback">
+                                {{ radarr_form.url.errors.0 }}
+                            </div>
+                        </div>
+
+                        <!-- API Key field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ radarr_form.apikey.label_tag }}
+                            {{ radarr_form.apikey }}
+                            <div class="invalid-feedback">
+                                {{ radarr_form.apikey.errors.0 }}
+                            </div>
+                            <div class="valid-feedback">
+                                {{ radarr_form.apikey.help_text }}
+                            </div>
+                        </div>
+
+                        <!-- Quality Profile field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ radarr_form.quality_profile.label_tag }}
+                            <select name="quality_profile" id="id_quality_profile" class="form-control">
+                                {% for value, text in radarr_form.fields.quality_profile.choices %}
+                                    <option value="{{ value }}" {% if value == radarr_form.instance.quality_profile %}selected="selected"{% endif %}>
+                                        {{ text }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">
+                                {{ radarr_form.quality_profile.errors.0 }}
+                            </div>
+                        </div>
+
+                        <!-- Root Folder field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ radarr_form.root_folder.label_tag }}
+                            <select name="root_folder" id="id_root_folder" class="form-control">
+                                {% for value, text in radarr_form.fields.root_folder.choices %}
+                                    <option value="{{ value }}" {% if value == radarr_form.instance.root_folder %}selected="selected"{% endif %}>
+                                        {{ text }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">
+                                {{ radarr_form.root_folder.errors.0 }}
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex">
+                            <button type="submit" class="btn btn-success">Save</button>
+                            <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="test_radarr" class="btn btn-primary">Test Connection</button>
+                            {% if active_radarr_id %}
+                            <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="radarr_delete" class="btn btn-danger">Delete</button>
+                            {% endif %}
+                        </div>
+                    </form>
+                </div>
             </div>
+            {% endif %}
         </div>
-        <div class="d-grid gap-2 d-md-flex mb-4">
-            <input class="btn btn-primary" type="submit" value="Select Sonarr Server">
-        </div>
-    </form>
-    
-    <!-- Sonarr Instance Form -->
-    {% if sonarr_form %}
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">Sonarr Server Configuration</h5>
-        </div>
-        <div class="card-body">
-            <form action="{% url 'home_view' %}" method="post">
+        <div class="tab-pane fade {% if active_tab == 'sonarr' %}show active{% endif %}" id="sonarr-pane" role="tabpanel" aria-labelledby="sonarr-tab" tabindex="0">
+            <!-- Sonarr Configuration -->
+            <h3>
+                Sonarr
+                <small class="text-muted">Configuration Options</small>
+            </h3>
+
+            <!-- Sonarr Server Selection -->
+            <form action="{% url 'home_view' %}" method="post" class="mb-3">
                 {% csrf_token %}
-                <input type="hidden" name="form_type" value="sonarr_save">
-                <input type="hidden" name="instance_id" value="{{ active_sonarr_id|default:'new' }}">
-                
-                {% if sonarr_form.non_field_errors %}
-                    <div class="alert alert-warning" role="alert">
-                        {{ sonarr_form.non_field_errors }}
-                    </div>        
-                {% endif %}
-                
-                <!-- Name field -->
-                <div class="fieldWrapper mb-3">
-                    {{ sonarr_form.name.label_tag }}
-                    {{ sonarr_form.name }}
-                    <div class="invalid-feedback">
-                        {{ sonarr_form.name.errors.0 }}
+                <input type="hidden" name="form_type" value="sonarr_select">
+                <div class="form-group">
+                    <div class="fieldWrapper mb-3">
+                        {{ sonarr_selection_form.server_selection.label_tag }}
+                        {{ sonarr_selection_form.server_selection }}
                     </div>
                 </div>
-                
-                <!-- URL field -->
-                <div class="fieldWrapper mb-3">
-                    {{ sonarr_form.url.label_tag }}
-                    {{ sonarr_form.url }}
-                    <div class="invalid-feedback">
-                        {{ sonarr_form.url.errors.0 }}
-                    </div>
-                </div>
-                
-                <!-- API Key field -->
-                <div class="fieldWrapper mb-3">
-                    {{ sonarr_form.apikey.label_tag }}
-                    {{ sonarr_form.apikey }}
-                    <div class="invalid-feedback">
-                        {{ sonarr_form.apikey.errors.0 }}
-                    </div>
-                    <div class="valid-feedback">
-                        {{ sonarr_form.apikey.help_text }}
-                    </div>
-                </div>
-                
-                <!-- Quality Profile field -->
-                <div class="fieldWrapper mb-3">
-                    {{ sonarr_form.quality_profile.label_tag }}
-                    <select name="quality_profile" id="id_quality_profile" class="form-control">
-                        {% for value, text in sonarr_form.fields.quality_profile.choices %}
-                            <option value="{{ value }}" {% if value == sonarr_form.instance.quality_profile %}selected="selected"{% endif %}>
-                                {{ text }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                    <div class="invalid-feedback">
-                        {{ sonarr_form.quality_profile.errors.0 }}
-                    </div>
-                </div>
-                
-                <!-- Root Folder field -->
-                <div class="fieldWrapper mb-3">
-                    {{ sonarr_form.root_folder.label_tag }}
-                    <select name="root_folder" id="id_root_folder" class="form-control">
-                        {% for value, text in sonarr_form.fields.root_folder.choices %}
-                            <option value="{{ value }}" {% if value == sonarr_form.instance.root_folder %}selected="selected"{% endif %}>
-                                {{ text }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                    <div class="invalid-feedback">
-                        {{ sonarr_form.root_folder.errors.0 }}
-                    </div>
-                </div>
-                
-                <div class="d-grid gap-2 d-md-flex">
-                    <button type="submit" class="btn btn-success">Save</button>
-                    <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="test_sonarr" class="btn btn-primary">Test Connection</button>
-                    {% if active_sonarr_id %}
-                    <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="sonarr_delete" class="btn btn-danger">Delete</button>
-                    {% endif %}
+                <div class="d-grid gap-2 d-md-flex mb-4">
+                    <input class="btn btn-primary" type="submit" value="Select Sonarr Server">
                 </div>
             </form>
+
+            <!-- Sonarr Instance Form -->
+            {% if sonarr_form %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Sonarr Server Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form action="{% url 'home_view' %}" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="form_type" value="sonarr_save">
+                        <input type="hidden" name="instance_id" value="{{ active_sonarr_id|default:'new' }}">
+
+                        {% if sonarr_form.non_field_errors %}
+                            <div class="alert alert-warning" role="alert">
+                                {{ sonarr_form.non_field_errors }}
+                            </div>
+                        {% endif %}
+
+                        <!-- Name field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ sonarr_form.name.label_tag }}
+                            {{ sonarr_form.name }}
+                            <div class="invalid-feedback">
+                                {{ sonarr_form.name.errors.0 }}
+                            </div>
+                        </div>
+
+                        <!-- URL field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ sonarr_form.url.label_tag }}
+                            {{ sonarr_form.url }}
+                            <div class="invalid-feedback">
+                                {{ sonarr_form.url.errors.0 }}
+                            </div>
+                        </div>
+
+                        <!-- API Key field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ sonarr_form.apikey.label_tag }}
+                            {{ sonarr_form.apikey }}
+                            <div class="invalid-feedback">
+                                {{ sonarr_form.apikey.errors.0 }}
+                            </div>
+                            <div class="valid-feedback">
+                                {{ sonarr_form.apikey.help_text }}
+                            </div>
+                        </div>
+
+                        <!-- Quality Profile field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ sonarr_form.quality_profile.label_tag }}
+                            <select name="quality_profile" id="id_quality_profile" class="form-control">
+                                {% for value, text in sonarr_form.fields.quality_profile.choices %}
+                                    <option value="{{ value }}" {% if value == sonarr_form.instance.quality_profile %}selected="selected"{% endif %}>
+                                        {{ text }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">
+                                {{ sonarr_form.quality_profile.errors.0 }}
+                            </div>
+                        </div>
+
+                        <!-- Root Folder field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ sonarr_form.root_folder.label_tag }}
+                            <select name="root_folder" id="id_root_folder" class="form-control">
+                                {% for value, text in sonarr_form.fields.root_folder.choices %}
+                                    <option value="{{ value }}" {% if value == sonarr_form.instance.root_folder %}selected="selected"{% endif %}>
+                                        {{ text }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">
+                                {{ sonarr_form.root_folder.errors.0 }}
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex">
+                            <button type="submit" class="btn btn-success">Save</button>
+                            <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="test_sonarr" class="btn btn-primary">Test Connection</button>
+                            {% if active_sonarr_id %}
+                            <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="sonarr_delete" class="btn btn-danger">Delete</button>
+                            {% endif %}
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
-    {% endif %}
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Persist active tab selection for next request
+    document.querySelectorAll('#configTabs button[data-bs-toggle="tab"]').forEach(tabButton => {
+        tabButton.addEventListener('shown.bs.tab', event => {
+            const tabId = event.target.id;
+            const tabName = tabId.replace('-tab', '');
+            fetch('/set_active_tab/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('input[name="csrfmiddlewaretoken"]').value
+                },
+                body: JSON.stringify({ tab: tabName })
+            }).catch(() => {});
+        });
+    });
+
     // Add event listener for the test connection buttons
     document.querySelectorAll('button[value^="test_"]').forEach(button => {
         button.addEventListener('click', function(e) {
