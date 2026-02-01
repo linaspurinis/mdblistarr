@@ -1,7 +1,6 @@
 from django.urls import path
 from .views import home_view
 from . import views
-from .cron import post_radarr_payload
 from .log import log_view
 
 urlpatterns = [

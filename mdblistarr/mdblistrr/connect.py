@@ -1,6 +1,6 @@
 import logging, time, json, re, requests
 from urllib.parse import urlparse
-from retrying import retry
+from tenacity import retry, stop_after_attempt, wait_fixed
 from requests.exceptions import RequestException, JSONDecodeError, ConnectionError
 from lxml import html
 
@@ -30,7 +30,7 @@ class Connect:
     def get_json(self, url, json=None, headers=None, params=None, cookies=None):
         return self.get(url, json=json, headers=headers, params=params, cookies=cookies).json()
 
-    @retry(stop_max_attempt_number=6, wait_fixed=10000)
+    @retry(stop=stop_after_attempt(6), wait=wait_fixed(10))
     def get(self, url, json=None, headers=None, params=None, cookies=None):
         return self.session.get(url, json=json, headers=headers, params=params, cookies=cookies)
 
@@ -58,6 +58,6 @@ class Connect:
         except RequestException as e:
             return {"error": "Request failed", "exception": str(e)}
 
-    @retry(stop_max_attempt_number=6, wait_fixed=10000)
+    @retry(stop=stop_after_attempt(6), wait=wait_fixed(10))
     def post(self, url, data=None, json=None, headers=None, params=None, cookies=None):
         return self.session.post(url, data=data, json=json, params=params, headers=headers, cookies=cookies)

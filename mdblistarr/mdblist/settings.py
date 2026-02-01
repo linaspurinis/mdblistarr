@@ -38,15 +38,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'mdblistrr.apps.MdblistrrConfig', # new
-    'django_crontab',
+    'django_scheduled_tasks',
 ]
 
-CRONJOBS = [
-    ('11 10 * * *', 'mdblistrr.cron.post_radarr_payload'),
-    ('11 11 * * *', 'mdblistrr.cron.post_sonarr_payload'),
-    ('*/5 * * * *', 'mdblistrr.cron.get_mdblist_queue_to_arr'),
-    ('*/15 * * * *', 'mdblistrr.cron.process_instance_changes'),
-]
+TASKS = {
+    "default": {
+        "BACKEND": "django.tasks.backends.immediate.ImmediateBackend",
+    }
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

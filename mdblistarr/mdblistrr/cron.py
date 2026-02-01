@@ -1,5 +1,6 @@
-from django.http import JsonResponse
 from django.utils import timezone
+from django.tasks import task
+from django_scheduled_tasks import cron_task
 from .connect import Connect
 import time
 import json
@@ -44,13 +45,18 @@ def post_radarr_payload():
 
         if res.get('response') == 'Ok':
             save_log(provider, 1, f'{radarr_api.name}: Uploaded {total_records} records to MDBList.com')
-            return JsonResponse(res)
+            return res
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
-            return JsonResponse(res)
+            return res
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
-        return JsonResponse({'response': 'Exception'})
+        return {'response': 'Exception'}
+
+@cron_task(cron_schedule="11 10 * * *")
+@task
+def post_radarr_payload_task():
+    return post_radarr_payload()
 
 def post_sonarr_payload():
     try:
@@ -79,16 +85,20 @@ def post_sonarr_payload():
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
         if res.get('response') == 'Ok':
             save_log(provider, 1, f'{sonarr_api.name}: Uploaded {total_records} records to MDBList.com')
-            return JsonResponse(res)
+            return res
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
-            return JsonResponse(res)
+            return res
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
-        return JsonResponse({'response': 'Exception'})
+        return {'response': 'Exception'}
+
+@cron_task(cron_schedule="11 11 * * *")
+@task
+def post_sonarr_payload_task():
+    return post_sonarr_payload()
 
 def get_mdblist_queue_to_arr():
-
     try:
         time.sleep(random.uniform(0.0, 36.0))
         mdblistarr = MDBListarr()
@@ -157,9 +167,14 @@ def get_mdblist_queue_to_arr():
                     # save_log(provider, 2, f"Error posting show to Sonarr")
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
-        return JsonResponse({'result': 500})
+        return {'result': 500}
     
-    return JsonResponse({'result': 200})
+    return {'result': 200}
+
+@cron_task(cron_schedule="*/5 * * * *")
+@task
+def get_mdblist_queue_to_arr_task():
+    return get_mdblist_queue_to_arr()
 
 def process_instance_changes():
     try:
@@ -167,7 +182,7 @@ def process_instance_changes():
         logs = InstanceChangeLog.objects.filter(processed=False).order_by('timestamp')
 
         if not logs.exists():
-            return JsonResponse({"response": "Log is empty"})
+            return {"response": "Log is empty"}
 
         time.sleep(random.uniform(0.0, 36.0))
 
@@ -193,7 +208,7 @@ def process_instance_changes():
         
         if not radarr_instances and not sonarr_instances:
             logs.update(processed=True)
-            return JsonResponse({"response": "No instances to sync"})
+            return {"response": "No instances to sync"}
             
         mdblistarr = MDBListarr()
         res = mdblistarr.mdblist.post_arr_changes(json_payload)
@@ -201,11 +216,15 @@ def process_instance_changes():
         if res.get('response') == 'Ok':
             logs.update(processed=True)
             save_log(provider, 1, f'Configuration uploaded to MDBList.com')
-            return JsonResponse(res)
+            return res
         else:
             save_log(provider, 2, f'Configuration upload to MDBList.com Failed: {res}')
-            return JsonResponse(res)
+            return res
     except Exception as e:
         save_log(provider, 2, f'{traceback.format_exc()}')
-        return JsonResponse({'result': 500})
+        return {'result': 500}
 
+@cron_task(cron_schedule="*/15 * * * *")
+@task
+def process_instance_changes_task():
+    return process_instance_changes()
