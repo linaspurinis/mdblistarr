@@ -102,27 +102,61 @@ def post_sonarr_payload():
             return {"response": "Missing API key"}
         sonarr_api = SonarrAPI()
         series = sonarr_api.get_series()
+        exclusions = sonarr_api.get_import_list_exclusions()
 
         provider = 2 # Sonarr JSON POST
 
-        json = []
-        for show in series:
-            if show.get('tvdbId'):
-                exists = None
-                if show.get('seasons'):
-                    for season in show['seasons']:
-                        if season.get('statistics', {}).get('percentOfEpisodes') == 100:
-                            exists = True  # At least one season is downloaded 100%
-                elif show['monitored']:
-                    exists = False
-                if exists is not None:
-                    json.append({'exists':exists, 'tvdb':show.get('tvdbId')})
-        total_records = len(json)
-        json_payload = {'sonarr': json}
+        # Avoid sending an "empty" sync when Sonarr is unreachable (can accidentally wipe state server-side).
+        if isinstance(series, list) and len(series) == 1 and isinstance(series[0], dict) and series[0].get('result'):
+            save_log(provider, 2, f"{sonarr_api.name}: Sonarr /series request failed: {series[0].get('result')}")
+            return {"response": "SonarrError"}
+
+        records_by_tvdb = {}
+
+        # Library state (downloaded/missing). Only include when we can infer state.
+        for show in series if isinstance(series, list) else []:
+            if not isinstance(show, dict):
+                continue
+            tvdb_id = show.get('tvdbId')
+            if not tvdb_id:
+                continue
+
+            exists = None
+            if show.get('seasons'):
+                for season in show['seasons']:
+                    if season.get('statistics', {}).get('percentOfEpisodes') == 100:
+                        exists = True  # At least one season is downloaded 100%
+            elif show.get('monitored'):
+                exists = False
+
+            if exists is not None:
+                records_by_tvdb[tvdb_id] = {'tvdb': tvdb_id, 'exists': exists}
+
+        # Import List Exclusions -> mark excluded. Include excluded even if not in library.
+        excluded_count = 0
+        if isinstance(exclusions, list) and len(exclusions) == 1 and isinstance(exclusions[0], dict) and exclusions[0].get('result'):
+            save_log(provider, 2, f"{sonarr_api.name}: Sonarr /importlistexclusion request failed: {exclusions[0].get('result')}")
+            exclusions = []
+
+        for ex in exclusions if isinstance(exclusions, list) else []:
+            if not isinstance(ex, dict):
+                continue
+            tvdb_id = ex.get('tvdbId') or ex.get('tvdbid')
+            if not tvdb_id:
+                continue
+            rec = records_by_tvdb.get(tvdb_id, {'tvdb': tvdb_id})
+            if not rec.get('excluded'):
+                excluded_count += 1
+            rec['excluded'] = True
+            records_by_tvdb[tvdb_id] = rec
+
+        records = list(records_by_tvdb.values())
+        total_records = len(records)
+        json_payload = {'sonarr': records}
 
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
         if res.get('response') == 'Ok':
-            save_log(provider, 1, f'{sonarr_api.name}: Uploaded {total_records} records to MDBList.com')
+            save_log(provider, 1, f'{sonarr_api.name}: Uploaded {total_records} records to MDBList.com (excluded={excluded_count})')
             return res
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')

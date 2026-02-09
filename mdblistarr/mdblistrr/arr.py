@@ -67,6 +67,17 @@ class SonarrAPI():
             return json
         except Exception as e:
             return [{'result': f'Error connecting to Sonarr API: {str(e)}'}]
+
+    def get_import_list_exclusions(self):
+        """
+        Import List Exclusions (Settings -> Import Lists -> List Exclusions).
+        Used to mark items as excluded in the full library sync payload.
+        """
+        try:
+            json = self.connect.get_json(f"{self.url}/api/v3/importlistexclusion", params={"apikey": self.apikey})
+            return json
+        except Exception as e:
+            return [{'result': f'Error connecting to Sonarr API (importlistexclusion): {str(e)}'}]
     
     def post_show(self, payload):
         try:
