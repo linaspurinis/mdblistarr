@@ -139,6 +139,17 @@ class RadarrAPI():
             return json
         except Exception as e:
             return [{'result': f'Error connecting to Radarr API: {str(e)}'}]
+
+    def get_exclusions(self):
+        """
+        Import List Exclusions (Settings -> Import Lists -> List Exclusions).
+        Used to mark items as excluded in the full library sync payload.
+        """
+        try:
+            json = self.connect.get_json(f"{self.url}/api/v3/exclusions", params={"apikey": self.apikey})
+            return json
+        except Exception as e:
+            return [{'result': f'Error connecting to Radarr API (exclusions): {str(e)}'}]
     
     def post_movie(self, payload):
         try:

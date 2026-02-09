@@ -28,26 +28,49 @@ def post_radarr_payload():
             return {"response": "Missing API key"}
         radarr_api = RadarrAPI()
         movies = radarr_api.get_movies()
+        exclusions = radarr_api.get_exclusions()
 
         provider = 1 # Radarr JSON POST
 
-        json = []
-        for movie in movies:
-            if movie.get('tmdbId'):
-                exists = None
-                if movie['hasFile']:
-                    exists = True
-                elif movie['monitored']:
-                    exists = False
-                if exists is not None:
-                    json.append({'exists':exists, 'tmdb':movie.get('tmdbId')})
-        total_records = len(json)
-        json_payload = {'radarr': json}
+        records_by_tmdb = {}
+
+        # Library state (downloaded/missing). Only include when we can infer state.
+        for movie in movies if isinstance(movies, list) else []:
+            if not isinstance(movie, dict):
+                continue
+            tmdb_id = movie.get('tmdbId')
+            if not tmdb_id:
+                continue
+            exists = None
+            if movie.get('hasFile'):
+                exists = True
+            elif movie.get('monitored'):
+                exists = False
+            if exists is not None:
+                records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': exists}
+
+        # Import List Exclusions -> mark excluded. Include excluded even if not in library.
+        excluded_count = 0
+        for ex in exclusions if isinstance(exclusions, list) else []:
+            if not isinstance(ex, dict):
+                continue
+            tmdb_id = ex.get('tmdbId') or ex.get('tmdbid')
+            if not tmdb_id:
+                continue
+            rec = records_by_tmdb.get(tmdb_id, {'tmdb': tmdb_id})
+            if not rec.get('excluded'):
+                excluded_count += 1
+            rec['excluded'] = True
+            records_by_tmdb[tmdb_id] = rec
+
+        records = list(records_by_tmdb.values())
+        total_records = len(records)
+        json_payload = {'radarr': records}
 
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
 
         if res.get('response') == 'Ok':
-            save_log(provider, 1, f'{radarr_api.name}: Uploaded {total_records} records to MDBList.com')
+            save_log(provider, 1, f'{radarr_api.name}: Uploaded {total_records} records to MDBList.com (excluded={excluded_count})')
             return res
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
@@ -113,10 +136,58 @@ def get_mdblist_queue_to_arr():
             save_log(provider, 2, "MDBList API key not configured")
             return {"result": 400, "error": "mdblist_apikey not configured"}
 
-        queue = mdblistarr.mdblist.get_mdblist_queue()
+        queue_resp = mdblistarr.mdblist.get_mdblist_queue()
 
-        for item in queue:
-            if item['mediatype'] == 'movie':
+        # The MDBList queue endpoint usually returns a list of items, but in some
+        # cases we can get a dict (error wrapper, rate limit, etc) or a JSON string.
+        queue_items = None
+        if isinstance(queue_resp, list):
+            queue_items = queue_resp
+        elif isinstance(queue_resp, dict):
+            for key in ("queue", "results", "data", "items"):
+                if isinstance(queue_resp.get(key), list):
+                    queue_items = queue_resp[key]
+                    break
+
+            # If this is an error/traceback wrapper, stop early and log it.
+            if queue_items is None:
+                save_log(provider, 2, f"MDBList queue unexpected response (dict): {queue_resp}")
+                return {"result": 502, "error": "unexpected_queue_response"}
+        elif isinstance(queue_resp, str):
+            try:
+                decoded = json.loads(queue_resp)
+            except Exception:
+                save_log(provider, 2, f"MDBList queue unexpected response (str): {queue_resp[:500]}")
+                return {"result": 502, "error": "unexpected_queue_response"}
+
+            if isinstance(decoded, list):
+                queue_items = decoded
+            elif isinstance(decoded, dict):
+                for key in ("queue", "results", "data", "items"):
+                    if isinstance(decoded.get(key), list):
+                        queue_items = decoded[key]
+                        break
+                if queue_items is None:
+                    save_log(provider, 2, f"MDBList queue unexpected decoded response (dict): {decoded}")
+                    return {"result": 502, "error": "unexpected_queue_response"}
+            else:
+                save_log(provider, 2, f"MDBList queue unexpected decoded response (type={type(decoded)}): {decoded}")
+                return {"result": 502, "error": "unexpected_queue_response"}
+        else:
+            save_log(provider, 2, f"MDBList queue unexpected response type={type(queue_resp)}: {queue_resp}")
+            return {"result": 502, "error": "unexpected_queue_response"}
+
+        for item in queue_items:
+            if not isinstance(item, dict):
+                save_log(provider, 2, f"Skipping unexpected queue item type={type(item)}: {str(item)[:500]}")
+                continue
+
+            mediatype = item.get("mediatype")
+            if mediatype is None:
+                save_log(provider, 2, f"Skipping queue item missing 'mediatype': {item}")
+                continue
+
+            if mediatype == 'movie':
                 provider = 1
                 instance_id = item.get('instanceid')
                 movie_request_json = {
@@ -146,7 +217,7 @@ def get_mdblist_queue_to_arr():
                     save_log(provider, 2, f"Error posting movie to Radarr: {item['title']}. Raw response: {res}")
                     print(f"Error posting movie to Radarr: {item['title']}. Raw response: {res}")  # Print to console
                     # save_log(provider, 2, f"Error posting movie to Radarr")
-            elif item['mediatype'] == 'show':
+            elif mediatype == 'show':
                 provider = 2
                 instance_id = item.get('instanceid')
                 show_request_json = {
@@ -176,6 +247,8 @@ def get_mdblist_queue_to_arr():
                     save_log(provider, 2, f"Error posting show to Sonarr: {item['title']}. Raw response: {res}")
                     print(f"Error posting show to Sonarr: {item['title']}. Raw response: {res}")  # Print to console
                     # save_log(provider, 2, f"Error posting show to Sonarr")
+            else:
+                save_log(provider, 2, f"Skipping queue item with unknown mediatype={mediatype}: {item}")
     except Exception:
         save_log(provider, 2, f'{traceback.format_exc()}')
         return {'result': 500}
