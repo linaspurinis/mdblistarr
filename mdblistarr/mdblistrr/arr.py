@@ -1,7 +1,6 @@
 import logging, time, json, re, traceback
 from urllib.parse import urlsplit
 from .connect import Connect
-import traceback
 from .models import RadarrInstance, SonarrInstance
 
 class SonarrAPI():

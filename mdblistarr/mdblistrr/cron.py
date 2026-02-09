@@ -32,6 +32,11 @@ def post_radarr_payload():
 
         provider = 1 # Radarr JSON POST
 
+        # Avoid sending an "empty" sync when Radarr is unreachable (can accidentally wipe state server-side).
+        if isinstance(movies, list) and len(movies) == 1 and isinstance(movies[0], dict) and movies[0].get('result'):
+            save_log(provider, 2, f"{radarr_api.name}: Radarr /movie request failed: {movies[0].get('result')}")
+            return {"response": "RadarrError"}
+
         records_by_tmdb = {}
 
         # Library state (downloaded/missing). Only include when we can infer state.
@@ -51,6 +56,10 @@ def post_radarr_payload():
 
         # Import List Exclusions -> mark excluded. Include excluded even if not in library.
         excluded_count = 0
+        if isinstance(exclusions, list) and len(exclusions) == 1 and isinstance(exclusions[0], dict) and exclusions[0].get('result'):
+            save_log(provider, 2, f"{radarr_api.name}: Radarr /exclusions request failed: {exclusions[0].get('result')}")
+            exclusions = []
+
         for ex in exclusions if isinstance(exclusions, list) else []:
             if not isinstance(ex, dict):
                 continue
@@ -151,7 +160,7 @@ def get_mdblist_queue_to_arr():
 
             # If this is an error/traceback wrapper, stop early and log it.
             if queue_items is None:
-                save_log(provider, 2, f"MDBList queue unexpected response (dict): {queue_resp}")
+                save_log(provider, 2, f"MDBList queue unexpected response (dict): {str(queue_resp)[:1000]}")
                 return {"result": 502, "error": "unexpected_queue_response"}
         elif isinstance(queue_resp, str):
             try:
@@ -168,7 +177,7 @@ def get_mdblist_queue_to_arr():
                         queue_items = decoded[key]
                         break
                 if queue_items is None:
-                    save_log(provider, 2, f"MDBList queue unexpected decoded response (dict): {decoded}")
+                    save_log(provider, 2, f"MDBList queue unexpected decoded response (dict): {str(decoded)[:1000]}")
                     return {"result": 502, "error": "unexpected_queue_response"}
             else:
                 save_log(provider, 2, f"MDBList queue unexpected decoded response (type={type(decoded)}): {decoded}")
