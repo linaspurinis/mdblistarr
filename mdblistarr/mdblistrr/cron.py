@@ -39,20 +39,22 @@ def post_radarr_payload():
 
         records_by_tmdb = {}
 
-        # Library state (downloaded/missing). Only include when we can infer state.
+        # Library state (downloaded/missing).
         for movie in movies if isinstance(movies, list) else []:
             if not isinstance(movie, dict):
                 continue
             tmdb_id = movie.get('tmdbId')
             if not tmdb_id:
                 continue
-            exists = None
-            if movie.get('hasFile'):
-                exists = True
-            elif movie.get('monitored'):
-                exists = False
-            if exists is not None:
-                records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': exists}
+
+            has_file = movie.get('hasFile')
+            if has_file is True:
+                records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': True}
+            elif has_file is False:
+                records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': False}
+            else:
+                # Fallback: older/odd responses. Treat presence in Radarr as "exists".
+                records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': True}
 
         # Import List Exclusions -> mark excluded. Include excluded even if not in library.
         excluded_count = 0
@@ -113,7 +115,7 @@ def post_sonarr_payload():
 
         records_by_tvdb = {}
 
-        # Library state (downloaded/missing). Only include when we can infer state.
+        # Library state (downloaded/missing).
         for show in series if isinstance(series, list) else []:
             if not isinstance(show, dict):
                 continue
@@ -121,16 +123,36 @@ def post_sonarr_payload():
             if not tvdb_id:
                 continue
 
-            exists = None
-            if show.get('seasons'):
-                for season in show['seasons']:
-                    if season.get('statistics', {}).get('percentOfEpisodes') == 100:
-                        exists = True  # At least one season is downloaded 100%
-            elif show.get('monitored'):
-                exists = False
+            # Prefer series-level statistics when present.
+            # We consider "downloaded" if there is at least 1 episode file.
+            episode_file_count = None
+            stats = show.get('statistics') if isinstance(show.get('statistics'), dict) else None
+            if stats is not None and isinstance(stats.get('episodeFileCount'), int):
+                episode_file_count = stats.get('episodeFileCount')
 
-            if exists is not None:
-                records_by_tvdb[tvdb_id] = {'tvdb': tvdb_id, 'exists': exists}
+            # Fallback: sum season statistics.
+            if episode_file_count is None and isinstance(show.get('seasons'), list):
+                total = 0
+                found_any = False
+                for season in show['seasons']:
+                    if not isinstance(season, dict):
+                        continue
+                    s = season.get('statistics') if isinstance(season.get('statistics'), dict) else None
+                    if s is None:
+                        continue
+                    if isinstance(s.get('episodeFileCount'), int):
+                        total += s.get('episodeFileCount')
+                        found_any = True
+                if found_any:
+                    episode_file_count = total
+
+            if episode_file_count is None:
+                # Can't infer reliably; treat presence in Sonarr as "exists".
+                records_by_tvdb[tvdb_id] = {'tvdb': tvdb_id, 'exists': True}
+            elif episode_file_count > 0:
+                records_by_tvdb[tvdb_id] = {'tvdb': tvdb_id, 'exists': True}
+            else:
+                records_by_tvdb[tvdb_id] = {'tvdb': tvdb_id, 'exists': False}
 
         # Import List Exclusions -> mark excluded. Include excluded even if not in library.
         excluded_count = 0
@@ -246,7 +268,18 @@ def get_mdblist_queue_to_arr():
                 res = radarr_api.post_movie(movie_request_json)
                 if isinstance(res, list):
                     if res[0].get('errorMessage'):
-                        save_log(provider, 2, f"Error adding movie to Radarr: {item['title']}. {res[0]['errorMessage']}.")
+                        msg = res[0].get('errorMessage') or ""
+                        # Treat "already added" as a non-error and trigger a search instead.
+                        if 'already been added' in msg.lower():
+                            search_res = radarr_api.trigger_movie_search(item.get('tmdbid'))
+                            if isinstance(search_res, dict) and search_res.get("error") == "movie_not_found":
+                                save_log(provider, 2, f"Movie already exists in Radarr but could not resolve by tmdbid for search: {item['title']} (tmdbid={item.get('tmdbid')}).")
+                            elif isinstance(search_res, dict) and search_res.get("error"):
+                                save_log(provider, 2, f"Movie already exists in Radarr; search trigger failed: {item['title']}. {search_res}")
+                            else:
+                                save_log(provider, 1, f"Movie already exists in Radarr; triggered search: {item['title']}.")
+                        else:
+                            save_log(provider, 2, f"Error adding movie to Radarr: {item['title']}. {msg}.")
                     else:
                         save_log(provider, 2, f"Error posting movie to Radarr: {item['title']}. Raw response: {res}")
                         print(f"Error posting movie to Radarr: {item['title']}. Raw response: {res}")  # Print to console
@@ -254,7 +287,17 @@ def get_mdblist_queue_to_arr():
                 elif res.get('title'):
                     save_log(provider, 1, f"Added movie to Radarr: {item['title']}.")
                 elif res.get('errorMessage'):
-                    save_log(provider, 2, f"Error posting movie to Radarr: {item['title']}. {res['errorMessage']}")
+                    msg = res.get('errorMessage') or ""
+                    if 'already been added' in msg.lower():
+                        search_res = radarr_api.trigger_movie_search(item.get('tmdbid'))
+                        if isinstance(search_res, dict) and search_res.get("error") == "movie_not_found":
+                            save_log(provider, 2, f"Movie already exists in Radarr but could not resolve by tmdbid for search: {item['title']} (tmdbid={item.get('tmdbid')}).")
+                        elif isinstance(search_res, dict) and search_res.get("error"):
+                            save_log(provider, 2, f"Movie already exists in Radarr; search trigger failed: {item['title']}. {search_res}")
+                        else:
+                            save_log(provider, 1, f"Movie already exists in Radarr; triggered search: {item['title']}.")
+                    else:
+                        save_log(provider, 2, f"Error posting movie to Radarr: {item['title']}. {msg}")
                 else:
                     # Log the full response for debugging
                     save_log(provider, 2, f"Error posting movie to Radarr: {item['title']}. Raw response: {res}")

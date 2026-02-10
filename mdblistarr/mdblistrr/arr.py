@@ -160,12 +160,55 @@ class RadarrAPI():
             return json
         except Exception as e:
             return [{'result': f'Error connecting to Radarr API (exclusions): {str(e)}'}]
-    
+
     def post_movie(self, payload):
         try:
             return self.connect.post_json(f"{self.url}/api/v3/movie", json=payload, params={"apikey": self.apikey})
         except Exception:
             return {'errorMessage': traceback.format_exc()}
+
+    def _find_movie_id_by_tmdb(self, tmdb_id):
+        """
+        Resolve an existing Radarr movie ID by TMDB ID.
+        We try a filtered request first, then fall back to fetching all movies.
+        """
+        try:
+            # Some Radarr versions support filtering by tmdbId.
+            filtered = self.connect.get_json(
+                f"{self.url}/api/v3/movie",
+                params={"apikey": self.apikey, "tmdbId": tmdb_id},
+            )
+            if isinstance(filtered, list):
+                for m in filtered:
+                    if isinstance(m, dict) and m.get("tmdbId") == tmdb_id and m.get("id") is not None:
+                        return m["id"]
+            elif isinstance(filtered, dict) and filtered.get("id") is not None and filtered.get("tmdbId") == tmdb_id:
+                return filtered["id"]
+        except Exception:
+            pass
+
+        movies = self.get_movies()
+        if isinstance(movies, list):
+            for m in movies:
+                if isinstance(m, dict) and m.get("tmdbId") == tmdb_id and m.get("id") is not None:
+                    return m["id"]
+        return None
+
+    def trigger_movie_search(self, tmdb_id):
+        """
+        Trigger an immediate search in Radarr for a movie by TMDB ID.
+        Returns the command response, or a dict with error details.
+        """
+        movie_id = self._find_movie_id_by_tmdb(tmdb_id)
+        if movie_id is None:
+            return {"error": "movie_not_found", "tmdbId": tmdb_id}
+
+        # Radarr command: MoviesSearch expects movieIds array.
+        return self.connect.post_json(
+            f"{self.url}/api/v3/command",
+            json={"name": "MoviesSearch", "movieIds": [movie_id]},
+            params={"apikey": self.apikey},
+        )
 
 class MdblistAPI():
     def __init__(self, apikey):
