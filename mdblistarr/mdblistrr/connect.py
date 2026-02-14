@@ -1,4 +1,4 @@
-import logging, time, json, re, requests, gzip, zlib
+import logging, time, json as jsonlib, re, requests, gzip, zlib
 from urllib.parse import urlparse
 from tenacity import retry, stop_after_attempt, wait_fixed
 from requests.exceptions import RequestException, JSONDecodeError, ConnectionError
@@ -131,7 +131,7 @@ class Connect:
                 decoded = self._decode_response_bytes(response)
                 if decoded.strip():
                     try:
-                        return json.loads(decoded)
+                        return jsonlib.loads(decoded)
                     except Exception:
                         pass
                 return {

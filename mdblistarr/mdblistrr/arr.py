@@ -172,6 +172,14 @@ class RadarrAPI():
         Resolve an existing Radarr movie ID by TMDB ID.
         We try a filtered request first, then fall back to fetching all movies.
         """
+        def tmdb_ids_match(left, right):
+            if left is None or right is None:
+                return False
+            try:
+                return int(left) == int(right)
+            except (TypeError, ValueError):
+                return str(left).strip() == str(right).strip()
+
         try:
             # Some Radarr versions support filtering by tmdbId.
             filtered = self.connect.get_json(
@@ -180,9 +188,9 @@ class RadarrAPI():
             )
             if isinstance(filtered, list):
                 for m in filtered:
-                    if isinstance(m, dict) and m.get("tmdbId") == tmdb_id and m.get("id") is not None:
+                    if isinstance(m, dict) and tmdb_ids_match(m.get("tmdbId"), tmdb_id) and m.get("id") is not None:
                         return m["id"]
-            elif isinstance(filtered, dict) and filtered.get("id") is not None and filtered.get("tmdbId") == tmdb_id:
+            elif isinstance(filtered, dict) and filtered.get("id") is not None and tmdb_ids_match(filtered.get("tmdbId"), tmdb_id):
                 return filtered["id"]
         except Exception:
             pass
@@ -190,7 +198,7 @@ class RadarrAPI():
         movies = self.get_movies()
         if isinstance(movies, list):
             for m in movies:
-                if isinstance(m, dict) and m.get("tmdbId") == tmdb_id and m.get("id") is not None:
+                if isinstance(m, dict) and tmdb_ids_match(m.get("tmdbId"), tmdb_id) and m.get("id") is not None:
                     return m["id"]
         return None
 

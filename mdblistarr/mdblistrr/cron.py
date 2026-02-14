@@ -33,8 +33,14 @@ def post_radarr_payload():
         provider = 1 # Radarr JSON POST
 
         # Avoid sending an "empty" sync when Radarr is unreachable (can accidentally wipe state server-side).
+        if isinstance(movies, dict) and movies.get('error'):
+            save_log(provider, 2, f"{radarr_api.name}: Radarr /movie request failed: {movies}")
+            return {"response": "RadarrError"}
         if isinstance(movies, list) and len(movies) == 1 and isinstance(movies[0], dict) and movies[0].get('result'):
             save_log(provider, 2, f"{radarr_api.name}: Radarr /movie request failed: {movies[0].get('result')}")
+            return {"response": "RadarrError"}
+        if not isinstance(movies, list):
+            save_log(provider, 2, f"{radarr_api.name}: Radarr /movie unexpected response type={type(movies)} payload={str(movies)[:500]}")
             return {"response": "RadarrError"}
 
         records_by_tmdb = {}
@@ -58,8 +64,14 @@ def post_radarr_payload():
 
         # Import List Exclusions -> mark excluded. Include excluded even if not in library.
         excluded_count = 0
-        if isinstance(exclusions, list) and len(exclusions) == 1 and isinstance(exclusions[0], dict) and exclusions[0].get('result'):
+        if isinstance(exclusions, dict) and exclusions.get('error'):
+            save_log(provider, 2, f"{radarr_api.name}: Radarr /exclusions request failed: {exclusions}")
+            exclusions = []
+        elif isinstance(exclusions, list) and len(exclusions) == 1 and isinstance(exclusions[0], dict) and exclusions[0].get('result'):
             save_log(provider, 2, f"{radarr_api.name}: Radarr /exclusions request failed: {exclusions[0].get('result')}")
+            exclusions = []
+        elif not isinstance(exclusions, list):
+            save_log(provider, 2, f"{radarr_api.name}: Radarr /exclusions unexpected response type={type(exclusions)} payload={str(exclusions)[:500]}")
             exclusions = []
 
         for ex in exclusions if isinstance(exclusions, list) else []:
@@ -109,8 +121,14 @@ def post_sonarr_payload():
         provider = 2 # Sonarr JSON POST
 
         # Avoid sending an "empty" sync when Sonarr is unreachable (can accidentally wipe state server-side).
+        if isinstance(series, dict) and series.get('error'):
+            save_log(provider, 2, f"{sonarr_api.name}: Sonarr /series request failed: {series}")
+            return {"response": "SonarrError"}
         if isinstance(series, list) and len(series) == 1 and isinstance(series[0], dict) and series[0].get('result'):
             save_log(provider, 2, f"{sonarr_api.name}: Sonarr /series request failed: {series[0].get('result')}")
+            return {"response": "SonarrError"}
+        if not isinstance(series, list):
+            save_log(provider, 2, f"{sonarr_api.name}: Sonarr /series unexpected response type={type(series)} payload={str(series)[:500]}")
             return {"response": "SonarrError"}
 
         records_by_tvdb = {}
@@ -156,8 +174,14 @@ def post_sonarr_payload():
 
         # Import List Exclusions -> mark excluded. Include excluded even if not in library.
         excluded_count = 0
-        if isinstance(exclusions, list) and len(exclusions) == 1 and isinstance(exclusions[0], dict) and exclusions[0].get('result'):
+        if isinstance(exclusions, dict) and exclusions.get('error'):
+            save_log(provider, 2, f"{sonarr_api.name}: Sonarr /importlistexclusion request failed: {exclusions}")
+            exclusions = []
+        elif isinstance(exclusions, list) and len(exclusions) == 1 and isinstance(exclusions[0], dict) and exclusions[0].get('result'):
             save_log(provider, 2, f"{sonarr_api.name}: Sonarr /importlistexclusion request failed: {exclusions[0].get('result')}")
+            exclusions = []
+        elif not isinstance(exclusions, list):
+            save_log(provider, 2, f"{sonarr_api.name}: Sonarr /importlistexclusion unexpected response type={type(exclusions)} payload={str(exclusions)[:500]}")
             exclusions = []
 
         for ex in exclusions if isinstance(exclusions, list) else []:
