@@ -37,7 +37,7 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr and Sonar
 ## MDBListarr
 
 ```sh
-git clone --branch v2-beta git@github.com:linaspurinis/mdblistarr.git
+git clone --branch latest git@github.com:linaspurinis/mdblistarr.git
 docker build -t mdblistarr .
 docker run -e PORT=5353 -p 5353:5353 mdblistarr
 ```
