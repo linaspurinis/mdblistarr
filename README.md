@@ -21,7 +21,7 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr and Sonar
 3. Set quality profile and root folder mappings per instance.
 4. Let scheduled sync keep MDBList and your ARR apps in sync.
 
-## New in v2.2.1
+## New in v2.2.2
 
 - Full sync now reports monitored and unmonitored items more reliably:
   - Radarr uses `hasFile` to mark downloaded vs missing.
@@ -43,11 +43,10 @@ docker run -e PORT=5353 -p 5353:5353 mdblistarr
 ```
 
 ```
-version: '3'
 services:
   mdblistarr:
     container_name: mdblistarr
-    image: linaspurinis/mdblistarr:v2-beta
+    image: linaspurinis/mdblistarr:latest
     environment:
       - PORT=5353
     volumes:
