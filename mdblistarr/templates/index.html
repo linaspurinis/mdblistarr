@@ -51,6 +51,11 @@
                             {% if not mdblist_form.errors %}API key validated successfully{% else %}{{ mdblist_form.mdblist_apikey.help_text }}{% endif %}
                         </div>
                     </div>
+                    <div class="fieldWrapper mb-3 form-check">
+                        {{ mdblist_form.sync_library_status }}
+                        {{ mdblist_form.sync_library_status.label_tag }}
+                        <div class="form-text">{{ mdblist_form.sync_library_status.help_text }}</div>
+                    </div>
                 </div>
                 <div class="d-grid gap-2 d-md-flex mb-4">
                     <input class="btn btn-success" type="submit" value="Save MDBList Configuration">

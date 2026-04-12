@@ -79,6 +79,12 @@ class SonarrAPI():
         except Exception as e:
             return [{'result': f'Error connecting to Sonarr API (importlistexclusion): {str(e)}'}]
     
+    def get_episodes(self, series_id):
+        try:
+            return self.connect.get_json(f"{self.url}/api/v3/episode", params={"apikey": self.apikey, "seriesId": series_id})
+        except Exception as e:
+            return [{'result': f'Error connecting to Sonarr API (episode): {str(e)}'}]
+
     def post_show(self, payload):
         try:
             return self.connect.post_json(f"{self.url}/api/v3/series", json=payload, params={"apikey": self.apikey})
@@ -239,6 +245,18 @@ class MdblistAPI():
             return(self.connect.post_json(f"{self.url}/service/mdblist/arr", json=payload, params={"apikey": self.apikey}))
         except:
             return {'response': f'{traceback.format_exc()}'}
+
+    def post_collection(self, payload):
+        try:
+            return self.connect.post_json(f"https://api.mdblist.com/sync/collection", json=payload, params={"apikey": self.apikey})
+        except:
+            return {'error': f'{traceback.format_exc()}'}
+
+    def post_collection_remove(self, payload):
+        try:
+            return self.connect.post_json(f"https://api.mdblist.com/sync/collection/remove", json=payload, params={"apikey": self.apikey})
+        except:
+            return {'error': f'{traceback.format_exc()}'}
 
     def get_mdblist_queue(self):
         try:

@@ -6,7 +6,7 @@ import time
 import json
 import random
 import traceback
-from .models import Log, InstanceChangeLog, RadarrInstance, SonarrInstance
+from .models import Log, InstanceChangeLog, RadarrInstance, SonarrInstance, Preferences
 from .services import get_mdblistarr
 from .arr import SonarrAPI
 from .arr import RadarrAPI
@@ -26,6 +26,9 @@ def post_radarr_payload():
         if mdblistarr.mdblist is None:
             save_log(1, 2, "MDBList API key not configured")
             return {"response": "Missing API key"}
+        sync_library_pref = Preferences.objects.filter(name='sync_library_status').first()
+        sync_library = sync_library_pref and sync_library_pref.value == '1'
+
         radarr_api = RadarrAPI()
         movies = radarr_api.get_movies()
         exclusions = radarr_api.get_exclusions()
@@ -94,10 +97,41 @@ def post_radarr_payload():
 
         if res.get('response') == 'Ok':
             save_log(provider, 1, f'{radarr_api.name}: Uploaded {total_records} records to MDBList.com (excluded={excluded_count})')
-            return res
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
             return res
+
+        # Sync collection (library status) if enabled.
+        if sync_library:
+            save_log(provider, 3, f'{radarr_api.name}: Starting collection sync')
+            collection_add = []
+            collection_remove = []
+            for rec in records:
+                item = {'ids': {'tmdb': rec['tmdb']}}
+                if rec.get('exists'):
+                    collection_add.append(item)
+                elif rec.get('exists') is False:
+                    collection_remove.append(item)
+
+            save_log(provider, 3, f'{radarr_api.name}: Collection sync: {len(collection_add)} downloaded, {len(collection_remove)} undownloaded')
+
+            if collection_add:
+                add_res = mdblistarr.mdblist.post_collection({'movies': collection_add})
+                if isinstance(add_res, dict) and add_res.get('error'):
+                    save_log(provider, 2, f'{radarr_api.name}: Collection add failed: {add_res}')
+                else:
+                    added = add_res.get('updated', {}).get('movies', 0) if isinstance(add_res, dict) else 0
+                    save_log(provider, 1, f'{radarr_api.name}: Synced {added} movies to MDBList collection')
+
+            if collection_remove:
+                rm_res = mdblistarr.mdblist.post_collection_remove({'movies': collection_remove})
+                if isinstance(rm_res, dict) and rm_res.get('error'):
+                    save_log(provider, 2, f'{radarr_api.name}: Collection remove failed: {rm_res}')
+                else:
+                    removed = rm_res.get('removed', {}).get('movies', 0) if isinstance(rm_res, dict) else 0
+                    save_log(provider, 1, f'{radarr_api.name}: Ensured {removed} undownloaded movies are not in MDBList collection')
+
+        return res
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
         return {'response': 'Exception'}
@@ -114,6 +148,9 @@ def post_sonarr_payload():
         if mdblistarr.mdblist is None:
             save_log(2, 2, "MDBList API key not configured")
             return {"response": "Missing API key"}
+        sync_library_pref = Preferences.objects.filter(name='sync_library_status').first()
+        sync_library = sync_library_pref and sync_library_pref.value == '1'
+
         sonarr_api = SonarrAPI()
         series = sonarr_api.get_series()
         exclusions = sonarr_api.get_import_list_exclusions()
@@ -132,6 +169,7 @@ def post_sonarr_payload():
             return {"response": "SonarrError"}
 
         records_by_tvdb = {}
+        series_id_to_tvdb = {}
 
         # Library state (downloaded/missing).
         for show in series if isinstance(series, list) else []:
@@ -140,6 +178,10 @@ def post_sonarr_payload():
             tvdb_id = show.get('tvdbId')
             if not tvdb_id:
                 continue
+
+            sonarr_id = show.get('id')
+            if sonarr_id is not None:
+                series_id_to_tvdb[sonarr_id] = tvdb_id
 
             # Prefer series-level statistics when present.
             # We consider "downloaded" if there is at least 1 episode file.
@@ -203,10 +245,74 @@ def post_sonarr_payload():
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
         if res.get('response') == 'Ok':
             save_log(provider, 1, f'{sonarr_api.name}: Uploaded {total_records} records to MDBList.com (excluded={excluded_count})')
-            return res
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
             return res
+
+        # Sync collection (library status) if enabled.
+        # For shows we need episode-level data so we don't incorrectly mark
+        # entire shows as collected when only some episodes have files.
+        if sync_library:
+            save_log(provider, 3, f'{sonarr_api.name}: Starting collection sync')
+            collection_add = []
+            collection_remove = []
+            total_episodes_collected = 0
+
+            for sonarr_id, tvdb_id in series_id_to_tvdb.items():
+                rec = records_by_tvdb.get(tvdb_id)
+                if not rec:
+                    continue
+
+                if not rec.get('exists'):
+                    collection_remove.append({'ids': {'tvdb': tvdb_id}})
+                    continue
+
+                episodes = sonarr_api.get_episodes(sonarr_id)
+                if not isinstance(episodes, list):
+                    save_log(provider, 2, f'{sonarr_api.name}: Failed to fetch episodes for series {sonarr_id} (tvdb={tvdb_id})')
+                    continue
+
+                seasons_map = {}
+                for ep in episodes:
+                    if not isinstance(ep, dict):
+                        continue
+                    if not ep.get('hasFile'):
+                        continue
+                    season_num = ep.get('seasonNumber')
+                    ep_num = ep.get('episodeNumber')
+                    if season_num is None or ep_num is None:
+                        continue
+                    seasons_map.setdefault(season_num, []).append({'number': ep_num})
+
+                if seasons_map:
+                    total_episodes_collected += sum(len(eps) for eps in seasons_map.values())
+                    collection_add.append({
+                        'ids': {'tvdb': tvdb_id},
+                        'seasons': [
+                            {'number': s_num, 'episodes': eps}
+                            for s_num, eps in sorted(seasons_map.items())
+                        ]
+                    })
+
+            save_log(provider, 3, f'{sonarr_api.name}: Collection sync: {len(collection_add)} shows ({total_episodes_collected} episodes) downloaded, {len(collection_remove)} undownloaded')
+
+            if collection_add:
+                add_res = mdblistarr.mdblist.post_collection({'shows': collection_add})
+                if isinstance(add_res, dict) and add_res.get('error'):
+                    save_log(provider, 2, f'{sonarr_api.name}: Collection add failed: {add_res}')
+                else:
+                    updated = add_res.get('updated', {}) if isinstance(add_res, dict) else {}
+                    save_log(provider, 1, f'{sonarr_api.name}: Synced collection (shows={updated.get("shows", 0)} seasons={updated.get("seasons", 0)} episodes={updated.get("episodes", 0)})')
+
+            if collection_remove:
+                rm_res = mdblistarr.mdblist.post_collection_remove({'shows': collection_remove})
+                if isinstance(rm_res, dict) and rm_res.get('error'):
+                    save_log(provider, 2, f'{sonarr_api.name}: Collection remove failed: {rm_res}')
+                else:
+                    removed = rm_res.get('removed', {}).get('shows', 0) if isinstance(rm_res, dict) else 0
+                    save_log(provider, 1, f'{sonarr_api.name}: Ensured {removed} undownloaded shows are not in MDBList collection')
+
+        return res
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
         return {'response': 'Exception'}

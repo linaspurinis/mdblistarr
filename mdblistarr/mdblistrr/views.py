@@ -19,14 +19,20 @@ logger = logging.getLogger(__name__)
 
 class MDBListForm(forms.Form):
     mdblist_apikey = forms.CharField(
-        label='MDBList API Key', 
+        label='MDBList API Key',
         widget=forms.TextInput(attrs={'placeholder': 'Enter your mdblist.com API key', 'class': 'form-control'})
+    )
+    sync_library_status = forms.BooleanField(
+        label='Sync Library Status',
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text='Also update your MDBList Library status based on your Sonarr/Radarr library.'
     )
 
     def clean(self):
         cleaned_data = super().clean()
         mdblist_apikey = cleaned_data.get('mdblist_apikey')
-        
+
         if mdblist_apikey:
             mdblistarr = get_mdblistarr()
             if mdblistarr.mdblist is None:
@@ -34,11 +40,10 @@ class MDBListForm(forms.Form):
             if not mdblistarr.mdblist.test_api(mdblist_apikey):
                 self._errors['mdblist_apikey'] = self.error_class(['API key is invalid, unable to connect'])
                 self.fields['mdblist_apikey'].widget.attrs.update({'class': 'form-control is-invalid'})
-                # self.add_error(None, "API key is invalid. Unable to save changes.")
 
             else:
                 self.fields['mdblist_apikey'].widget.attrs.update({'class': 'form-control is-valid'})
-        
+
         return cleaned_data
 
 class ServerSelectionForm(forms.Form):
@@ -125,7 +130,9 @@ class SonarrInstanceForm(forms.ModelForm):
 
 def home_view(request):
     mdblistarr = get_mdblistarr()
-    mdblist_form = MDBListForm(initial={'mdblist_apikey': mdblistarr.mdblist_apikey})
+    sync_library_pref = Preferences.objects.filter(name='sync_library_status').first()
+    sync_library_status = sync_library_pref and sync_library_pref.value == '1'
+    mdblist_form = MDBListForm(initial={'mdblist_apikey': mdblistarr.mdblist_apikey, 'sync_library_status': sync_library_status})
     
     radarr_instances = RadarrInstance.objects.all()
     sonarr_instances = SonarrInstance.objects.all()
@@ -158,8 +165,12 @@ def home_view(request):
             mdblist_form = MDBListForm(request.POST)
             if mdblist_form.is_valid():
                 Preferences.objects.update_or_create(
-                    name='mdblist_apikey', 
+                    name='mdblist_apikey',
                     defaults={'value': mdblist_form.cleaned_data['mdblist_apikey']}
+                )
+                Preferences.objects.update_or_create(
+                    name='sync_library_status',
+                    defaults={'value': '1' if mdblist_form.cleaned_data.get('sync_library_status') else '0'}
                 )
                 reset_mdblistarr()
                 mdblistarr = get_mdblistarr()
