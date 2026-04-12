@@ -3,10 +3,10 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 WORKDIR /usr/src/app
 COPY ./requirements.txt .
-COPY ./mdblistarr /usr/src/app/
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 RUN apt-get update
+COPY ./mdblistarr /usr/src/app/
 RUN mkdir -p /usr/src/db/
 ENV PORT=5353
 EXPOSE 5353
