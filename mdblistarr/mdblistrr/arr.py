@@ -246,6 +246,18 @@ class MdblistAPI():
         except:
             return {'response': f'{traceback.format_exc()}'}
 
+    def post_collection(self, payload):
+        try:
+            return self.connect.post_json("https://api.mdblist.com/sync/collection", json=payload, params={"apikey": self.apikey})
+        except:
+            return {'error': f'{traceback.format_exc()}'}
+
+    def post_collection_remove(self, payload):
+        try:
+            return self.connect.post_json("https://api.mdblist.com/sync/collection/remove", json=payload, params={"apikey": self.apikey})
+        except:
+            return {'error': f'{traceback.format_exc()}'}
+
     def post_arr_changes(self, payload):
         try:
             return(self.connect.post_json(f"{self.url}/service/mdblist/config", json=payload, params={"apikey": self.apikey}))

@@ -6,7 +6,7 @@ import time
 import json
 import random
 import traceback
-from .models import Log, InstanceChangeLog, RadarrInstance, SonarrInstance
+from .models import Log, InstanceChangeLog, RadarrInstance, SonarrInstance, Preferences
 from .services import get_mdblistarr
 from .arr import SonarrAPI
 from .arr import RadarrAPI
@@ -21,7 +21,7 @@ def save_log(provider, status, text):
 
 def post_radarr_payload():
     try:
-        time.sleep(random.uniform(0.0, 3600.0))
+        time.sleep(random.uniform(0.0, 10800.0))
         mdblistarr = get_mdblistarr()
         if mdblistarr.mdblist is None:
             save_log(1, 2, "MDBList API key not configured")
@@ -94,10 +94,39 @@ def post_radarr_payload():
 
         if res.get('response') == 'Ok':
             save_log(provider, 1, f'{radarr_api.name}: Uploaded {total_records} records to MDBList.com (excluded={excluded_count})')
-            return res
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
             return res
+
+        sync_library_pref = Preferences.objects.filter(name='sync_library_status').first()
+        if sync_library_pref and sync_library_pref.value == '1':
+            collection_add = [{'ids': {'tmdb': rec['tmdb']}} for rec in records if rec.get('exists')]
+            collection_remove = [{'ids': {'tmdb': rec['tmdb']}} for rec in records if rec.get('exists') is False]
+
+            chunk_size = 250
+            total_added = 0
+            for i in range(0, len(collection_add), chunk_size):
+                chunk = collection_add[i:i + chunk_size]
+                add_res = mdblistarr.mdblist.post_collection({'movies': chunk})
+                if isinstance(add_res, dict) and add_res.get('error'):
+                    save_log(provider, 2, f'{radarr_api.name}: Collection add failed: {add_res}')
+                    break
+                total_added += add_res.get('updated', {}).get('movies', 0) if isinstance(add_res, dict) else 0
+            if total_added:
+                save_log(provider, 1, f'{radarr_api.name}: Synced {total_added} movies to MDBList collection')
+
+            total_removed = 0
+            for i in range(0, len(collection_remove), chunk_size):
+                chunk = collection_remove[i:i + chunk_size]
+                rm_res = mdblistarr.mdblist.post_collection_remove({'movies': chunk})
+                if isinstance(rm_res, dict) and rm_res.get('error'):
+                    save_log(provider, 2, f'{radarr_api.name}: Collection remove failed: {rm_res}')
+                    break
+                total_removed += rm_res.get('removed', {}).get('movies', 0) if isinstance(rm_res, dict) else 0
+            if total_removed:
+                save_log(provider, 1, f'{radarr_api.name}: Removed {total_removed} movies from MDBList collection')
+
+        return res
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
         return {'response': 'Exception'}
@@ -109,7 +138,7 @@ def post_radarr_payload_task():
 
 def post_sonarr_payload():
     try:
-        time.sleep(random.uniform(0.0, 3600.0))
+        time.sleep(random.uniform(0.0, 10800.0))
         mdblistarr = get_mdblistarr()
         if mdblistarr.mdblist is None:
             save_log(2, 2, "MDBList API key not configured")
@@ -203,10 +232,66 @@ def post_sonarr_payload():
         res = mdblistarr.mdblist.post_arr_payload(json_payload)
         if res.get('response') == 'Ok':
             save_log(provider, 1, f'{sonarr_api.name}: Uploaded {total_records} records to MDBList.com (excluded={excluded_count})')
-            return res
         else:
             save_log(provider, 2, f'Upload records to MDBList.com Failed: {res}')
             return res
+
+        sync_library_pref = Preferences.objects.filter(name='sync_library_status').first()
+        if sync_library_pref and sync_library_pref.value == '1':
+            # Build season-level collection payloads from already-fetched series data.
+            # Each show in Sonarr includes per-season statistics, so no extra API calls needed.
+            collection_add = []
+            collection_remove = []
+
+            for show in series if isinstance(series, list) else []:
+                if not isinstance(show, dict):
+                    continue
+                tvdb_id = show.get('tvdbId')
+                if not tvdb_id:
+                    continue
+
+                seasons_with_files = []
+                for season in show.get('seasons') or []:
+                    if not isinstance(season, dict):
+                        continue
+                    season_num = season.get('seasonNumber')
+                    if season_num is None:
+                        continue
+                    s_stats = season.get('statistics') if isinstance(season.get('statistics'), dict) else {}
+                    if isinstance(s_stats.get('episodeFileCount'), int) and s_stats['episodeFileCount'] > 0:
+                        seasons_with_files.append({'number': season_num})
+
+                if seasons_with_files:
+                    collection_add.append({'ids': {'tvdb': tvdb_id}, 'seasons': seasons_with_files})
+                elif records_by_tvdb.get(tvdb_id, {}).get('exists') is False:
+                    collection_remove.append({'ids': {'tvdb': tvdb_id}})
+
+            chunk_size = 250
+            total_shows, total_seasons = 0, 0
+            for i in range(0, len(collection_add), chunk_size):
+                chunk = collection_add[i:i + chunk_size]
+                add_res = mdblistarr.mdblist.post_collection({'shows': chunk})
+                if isinstance(add_res, dict) and add_res.get('error'):
+                    save_log(provider, 2, f'{sonarr_api.name}: Collection add failed: {add_res}')
+                    break
+                updated = add_res.get('updated', {}) if isinstance(add_res, dict) else {}
+                total_shows += updated.get('shows', 0)
+                total_seasons += updated.get('seasons', 0)
+            if total_shows or total_seasons:
+                save_log(provider, 1, f'{sonarr_api.name}: Synced collection (shows={total_shows} seasons={total_seasons})')
+
+            total_removed = 0
+            for i in range(0, len(collection_remove), chunk_size):
+                chunk = collection_remove[i:i + chunk_size]
+                rm_res = mdblistarr.mdblist.post_collection_remove({'shows': chunk})
+                if isinstance(rm_res, dict) and rm_res.get('error'):
+                    save_log(provider, 2, f'{sonarr_api.name}: Collection remove failed: {rm_res}')
+                    break
+                total_removed += rm_res.get('removed', {}).get('shows', 0) if isinstance(rm_res, dict) else 0
+            if total_removed:
+                save_log(provider, 1, f'{sonarr_api.name}: Removed {total_removed} shows from MDBList collection')
+
+        return res
     except:
         save_log(provider, 2, f'{traceback.format_exc()}')
         return {'response': 'Exception'}
