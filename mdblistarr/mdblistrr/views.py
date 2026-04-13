@@ -10,6 +10,7 @@ from .arr import SonarrAPI
 from .arr import RadarrAPI
 from .arr import MdblistAPI
 from .services import get_mdblistarr, reset_mdblistarr
+import random
 import traceback
 import json
 import logging
@@ -144,8 +145,7 @@ def home_view(request):
     sync_library_pref = Preferences.objects.filter(name='sync_library_status').first()
     sync_hour_pref = Preferences.objects.filter(name='sync_hour').first()
     if not sync_hour_pref:
-        import random as _random
-        random_hour = str(_random.randint(0, 23))
+        random_hour = str(random.randint(0, 23))
         sync_hour_pref, _ = Preferences.objects.update_or_create(
             name='sync_hour', defaults={'value': random_hour}
         )
