@@ -58,13 +58,18 @@ def post_radarr_payload():
                 continue
 
             has_file = movie.get('hasFile')
+            date_added = None
+            if isinstance(movie.get('movieFile'), dict):
+                date_added = movie['movieFile'].get('dateAdded')
+            if not date_added:
+                date_added = movie.get('added')
             if has_file is True:
-                records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': True}
+                records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': True, 'date_added': date_added}
             elif has_file is False:
                 records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': False}
             else:
                 # Fallback: older/odd responses. Treat presence in Radarr as "exists".
-                records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': True}
+                records_by_tmdb[tmdb_id] = {'tmdb': tmdb_id, 'exists': True, 'date_added': date_added}
 
         # Import List Exclusions -> mark excluded. Include excluded even if not in library.
         excluded_count = 0

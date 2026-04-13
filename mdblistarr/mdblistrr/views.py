@@ -4,7 +4,7 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpResponseRedirect
 from django import forms
 from django.urls import reverse
-from .models import Preferences, RadarrInstance, SonarrInstance, Log
+from .models import Preferences, RadarrInstance, SonarrInstance
 from .connect import Connect
 from .arr import SonarrAPI
 from .arr import RadarrAPI
@@ -14,34 +14,11 @@ import traceback
 import json
 import logging
 from django.contrib import messages
-from django.utils import timezone
-from datetime import timedelta
 # Set up logging
 logger = logging.getLogger(__name__)
 
 
 SYNC_HOUR_CHOICES = [(str(h), f"{h:02d}:00 UTC") for h in range(24)]
-
-
-def _next_sync_label(sync_hour):
-    """Return a human-readable range like 'in 2h – 3h' based on chosen sync hour."""
-    now = timezone.now()
-    today_fire = now.replace(hour=sync_hour, minute=0, second=0, microsecond=0)
-    next_fire = today_fire if now < today_fire else today_fire + timedelta(days=1)
-
-    min_secs = max(0, (next_fire - now).total_seconds())
-    max_secs = min_secs + 3600
-
-    def fmt(secs):
-        h = int(secs // 3600)
-        m = int((secs % 3600) // 60)
-        if h == 0:
-            return f"{m}min"
-        if m == 0:
-            return f"{h}h"
-        return f"{h}h {m}min"
-
-    return f"{fmt(min_secs)} – {fmt(max_secs)}"
 
 
 class MDBListForm(forms.Form):
@@ -353,10 +330,6 @@ def home_view(request):
         'active_radarr_id': active_radarr_id,
         'active_sonarr_id': active_sonarr_id,
         'active_tab': request.session.get('active_tab', 'mdblist'),
-        'radarr_next_sync': _next_sync_label(int(sync_hour_pref.value)),
-        'sonarr_next_sync': _next_sync_label(int(sync_hour_pref.value)),
-        'radarr_last_sync': Log.objects.filter(provider=1, status=1).order_by('-date').values_list('date', flat=True).first(),
-        'sonarr_last_sync': Log.objects.filter(provider=2, status=1).order_by('-date').values_list('date', flat=True).first(),
     }
     
     return render(request, "index.html", context)

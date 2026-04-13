@@ -13,18 +13,7 @@
         {% endfor %}
     {% endif %}
     
-    <div class="d-flex gap-4 mb-3 text-muted small">
-        <span>Radarr &mdash;
-            {% if radarr_last_sync %}last sync: <strong>{{ radarr_last_sync|timesince }} ago</strong> &middot; {% endif %}
-            next sync: <strong>{{ radarr_next_sync }}</strong>
-        </span>
-        <span>Sonarr &mdash;
-            {% if sonarr_last_sync %}last sync: <strong>{{ sonarr_last_sync|timesince }} ago</strong> &middot; {% endif %}
-            next sync: <strong>{{ sonarr_next_sync }}</strong>
-        </span>
-    </div>
-
-    <ul class="nav nav-tabs" id="configTabs" role="tablist">
+<ul class="nav nav-tabs" id="configTabs" role="tablist">
         <li class="nav-item" role="presentation">
             <button class="nav-link {% if active_tab == 'mdblist' %}active{% endif %}" id="mdblist-tab" data-bs-toggle="tab" data-bs-target="#mdblist-pane" type="button" role="tab" aria-controls="mdblist-pane" aria-selected="{% if active_tab == 'mdblist' %}true{% else %}false{% endif %}">MDBList</button>
         </li>
