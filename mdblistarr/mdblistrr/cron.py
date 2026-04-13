@@ -20,21 +20,23 @@ def save_log(provider, status, text):
     log.save()
 
 def post_radarr_payload():
+    provider = 1  # Radarr JSON POST
     try:
         pref = Preferences.objects.filter(name='sync_hour').first()
-        sync_hour = int(pref.value) if pref else timezone.now().hour
+        if pref is None:
+            random_hour = str(random.randint(0, 23))
+            pref, _ = Preferences.objects.update_or_create(name='sync_hour', defaults={'value': random_hour})
+        sync_hour = int(pref.value)
         if timezone.now().hour != sync_hour:
             return {"response": "Not scheduled hour"}
         time.sleep(random.uniform(0.0, 3600.0))
         mdblistarr = get_mdblistarr()
         if mdblistarr.mdblist is None:
-            save_log(1, 2, "MDBList API key not configured")
+            save_log(provider, 2, "MDBList API key not configured")
             return {"response": "Missing API key"}
         radarr_api = RadarrAPI()
         movies = radarr_api.get_movies()
         exclusions = radarr_api.get_exclusions()
-
-        provider = 1 # Radarr JSON POST
 
         # Avoid sending an "empty" sync when Radarr is unreachable (can accidentally wipe state server-side).
         if isinstance(movies, dict) and movies.get('error'):
@@ -149,21 +151,23 @@ def post_radarr_payload_task():
     return post_radarr_payload()
 
 def post_sonarr_payload():
+    provider = 2  # Sonarr JSON POST
     try:
         pref = Preferences.objects.filter(name='sync_hour').first()
-        sync_hour = int(pref.value) if pref else timezone.now().hour
+        if pref is None:
+            random_hour = str(random.randint(0, 23))
+            pref, _ = Preferences.objects.update_or_create(name='sync_hour', defaults={'value': random_hour})
+        sync_hour = int(pref.value)
         if timezone.now().hour != sync_hour:
             return {"response": "Not scheduled hour"}
         time.sleep(random.uniform(0.0, 3600.0))
         mdblistarr = get_mdblistarr()
         if mdblistarr.mdblist is None:
-            save_log(2, 2, "MDBList API key not configured")
+            save_log(provider, 2, "MDBList API key not configured")
             return {"response": "Missing API key"}
         sonarr_api = SonarrAPI()
         series = sonarr_api.get_series()
         exclusions = sonarr_api.get_import_list_exclusions()
-
-        provider = 2 # Sonarr JSON POST
 
         # Avoid sending an "empty" sync when Sonarr is unreachable (can accidentally wipe state server-side).
         if isinstance(series, dict) and series.get('error'):
@@ -279,26 +283,24 @@ def post_sonarr_payload():
                         if isinstance(ef, dict) and ef.get('id') and ef.get('dateAdded'):
                             file_date_map[ef['id']] = ef['dateAdded']
 
-                if not file_date_map:
-                    continue
-
-                # Build per-episode seasons structure with individual collected_at.
-                episodes = sonarr_api.get_episodes(sonarr_id)
                 seasons_map = {}
-                if isinstance(episodes, list):
-                    for ep in episodes:
-                        if not isinstance(ep, dict) or not ep.get('hasFile'):
-                            continue
-                        season_num = ep.get('seasonNumber')
-                        ep_num = ep.get('episodeNumber')
-                        ef_id = ep.get('episodeFileId')
-                        if season_num is None or ep_num is None:
-                            continue
-                        ep_entry = {'number': ep_num}
-                        date = file_date_map.get(ef_id)
-                        if date:
-                            ep_entry['collected_at'] = date
-                        seasons_map.setdefault(season_num, []).append(ep_entry)
+                if file_date_map:
+                    # Build per-episode seasons structure with individual collected_at.
+                    episodes = sonarr_api.get_episodes(sonarr_id)
+                    if isinstance(episodes, list):
+                        for ep in episodes:
+                            if not isinstance(ep, dict) or not ep.get('hasFile'):
+                                continue
+                            season_num = ep.get('seasonNumber')
+                            ep_num = ep.get('episodeNumber')
+                            ef_id = ep.get('episodeFileId')
+                            if season_num is None or ep_num is None:
+                                continue
+                            ep_entry = {'number': ep_num}
+                            date = file_date_map.get(ef_id)
+                            if date:
+                                ep_entry['collected_at'] = date
+                            seasons_map.setdefault(season_num, []).append(ep_entry)
 
                 if seasons_map:
                     seasons_with_files = [
