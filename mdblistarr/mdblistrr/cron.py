@@ -21,7 +21,11 @@ def save_log(provider, status, text):
 
 def post_radarr_payload():
     try:
-        time.sleep(random.uniform(0.0, 10800.0))
+        pref = Preferences.objects.filter(name='sync_hour').first()
+        sync_hour = int(pref.value) if pref else timezone.now().hour
+        if timezone.now().hour != sync_hour:
+            return {"response": "Not scheduled hour"}
+        time.sleep(random.uniform(0.0, 3600.0))
         mdblistarr = get_mdblistarr()
         if mdblistarr.mdblist is None:
             save_log(1, 2, "MDBList API key not configured")
@@ -131,14 +135,18 @@ def post_radarr_payload():
         save_log(provider, 2, f'{traceback.format_exc()}')
         return {'response': 'Exception'}
 
-@cron_task(cron_schedule="11 10 * * *")
+@cron_task(cron_schedule="0 * * * *")
 @task
 def post_radarr_payload_task():
     return post_radarr_payload()
 
 def post_sonarr_payload():
     try:
-        time.sleep(random.uniform(0.0, 10800.0))
+        pref = Preferences.objects.filter(name='sync_hour').first()
+        sync_hour = int(pref.value) if pref else timezone.now().hour
+        if timezone.now().hour != sync_hour:
+            return {"response": "Not scheduled hour"}
+        time.sleep(random.uniform(0.0, 3600.0))
         mdblistarr = get_mdblistarr()
         if mdblistarr.mdblist is None:
             save_log(2, 2, "MDBList API key not configured")
@@ -296,7 +304,7 @@ def post_sonarr_payload():
         save_log(provider, 2, f'{traceback.format_exc()}')
         return {'response': 'Exception'}
 
-@cron_task(cron_schedule="11 11 * * *")
+@cron_task(cron_schedule="0 * * * *")
 @task
 def post_sonarr_payload_task():
     return post_sonarr_payload()

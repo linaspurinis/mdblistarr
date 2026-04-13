@@ -4,7 +4,7 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpResponseRedirect
 from django import forms
 from django.urls import reverse
-from .models import Preferences, RadarrInstance, SonarrInstance
+from .models import Preferences, RadarrInstance, SonarrInstance, Log
 from .connect import Connect
 from .arr import SonarrAPI
 from .arr import RadarrAPI
@@ -14,8 +14,35 @@ import traceback
 import json
 import logging
 from django.contrib import messages
+from django.utils import timezone
+from datetime import timedelta
 # Set up logging
 logger = logging.getLogger(__name__)
+
+
+SYNC_HOUR_CHOICES = [(str(h), f"{h:02d}:00 UTC") for h in range(24)]
+
+
+def _next_sync_label(sync_hour):
+    """Return a human-readable range like 'in 2h – 3h' based on chosen sync hour."""
+    now = timezone.now()
+    today_fire = now.replace(hour=sync_hour, minute=0, second=0, microsecond=0)
+    next_fire = today_fire if now < today_fire else today_fire + timedelta(days=1)
+
+    min_secs = max(0, (next_fire - now).total_seconds())
+    max_secs = min_secs + 3600
+
+    def fmt(secs):
+        h = int(secs // 3600)
+        m = int((secs % 3600) // 60)
+        if h == 0:
+            return f"{m}min"
+        if m == 0:
+            return f"{h}h"
+        return f"{h}h {m}min"
+
+    return f"{fmt(min_secs)} – {fmt(max_secs)}"
+
 
 class MDBListForm(forms.Form):
     mdblist_apikey = forms.CharField(
@@ -27,6 +54,12 @@ class MDBListForm(forms.Form):
         required=False,
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         help_text='Update your MDBList collection based on what is downloaded in Radarr/Sonarr.'
+    )
+    sync_hour = forms.ChoiceField(
+        label='Sync Hour (UTC)',
+        choices=SYNC_HOUR_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text='Hour of day (UTC) when Radarr and Sonarr sync runs. Actual sync happens within that hour at a random minute.',
     )
 
     def clean(self):
@@ -132,9 +165,17 @@ class SonarrInstanceForm(forms.ModelForm):
 def home_view(request):
     mdblistarr = get_mdblistarr()
     sync_library_pref = Preferences.objects.filter(name='sync_library_status').first()
+    sync_hour_pref = Preferences.objects.filter(name='sync_hour').first()
+    if not sync_hour_pref:
+        import random as _random
+        random_hour = str(_random.randint(0, 23))
+        sync_hour_pref, _ = Preferences.objects.update_or_create(
+            name='sync_hour', defaults={'value': random_hour}
+        )
     mdblist_form = MDBListForm(initial={
         'mdblist_apikey': mdblistarr.mdblist_apikey,
         'sync_library_status': sync_library_pref and sync_library_pref.value == '1',
+        'sync_hour': sync_hour_pref.value,
     })
     
     radarr_instances = RadarrInstance.objects.all()
@@ -191,6 +232,10 @@ def home_view(request):
                 Preferences.objects.update_or_create(
                     name='sync_library_status',
                     defaults={'value': '1' if mdblist_form.cleaned_data.get('sync_library_status') else '0'}
+                )
+                Preferences.objects.update_or_create(
+                    name='sync_hour',
+                    defaults={'value': mdblist_form.cleaned_data.get('sync_hour', '10')}
                 )
                 reset_mdblistarr()
                 mdblistarr = get_mdblistarr()
@@ -308,6 +353,10 @@ def home_view(request):
         'active_radarr_id': active_radarr_id,
         'active_sonarr_id': active_sonarr_id,
         'active_tab': request.session.get('active_tab', 'mdblist'),
+        'radarr_next_sync': _next_sync_label(int(sync_hour_pref.value)),
+        'sonarr_next_sync': _next_sync_label(int(sync_hour_pref.value)),
+        'radarr_last_sync': Log.objects.filter(provider=1, status=1).order_by('-date').values_list('date', flat=True).first(),
+        'sonarr_last_sync': Log.objects.filter(provider=2, status=1).order_by('-date').values_list('date', flat=True).first(),
     }
     
     return render(request, "index.html", context)
