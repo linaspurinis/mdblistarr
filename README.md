@@ -21,6 +21,11 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr and Sonar
 3. Set quality profile and root folder mappings per instance.
 4. Let scheduled sync keep MDBList and your ARR apps in sync.
 
+## New in v2.2.3
+
+- Optional MDBList collection sync: enable "Sync Library Status" in the MDBList config tab to keep your MDBList collection up to date based on what is downloaded in Radarr/Sonarr.
+- Fixed UI bug where the Radarr/Sonarr server form would reset after saving — the selected server now stays active across page reloads.
+
 ## New in v2.2.2
 
 - Full sync now reports monitored and unmonitored items more reliably:

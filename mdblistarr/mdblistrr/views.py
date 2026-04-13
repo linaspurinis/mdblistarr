@@ -152,9 +152,26 @@ def home_view(request):
     radarr_form = RadarrInstanceForm()
     sonarr_form = SonarrInstanceForm()
     
-    active_radarr_id = None
-    active_sonarr_id = None
-    
+    active_radarr_id = request.session.get('active_radarr_id')
+    active_sonarr_id = request.session.get('active_sonarr_id')
+
+    # Restore form for the previously active instance on fresh GET
+    if request.method == "GET":
+        if active_radarr_id and active_radarr_id != 'new':
+            try:
+                instance = RadarrInstance.objects.get(id=active_radarr_id)
+                radarr_form = RadarrInstanceForm(instance=instance)
+            except RadarrInstance.DoesNotExist:
+                active_radarr_id = None
+                request.session.pop('active_radarr_id', None)
+        if active_sonarr_id and active_sonarr_id != 'new':
+            try:
+                instance = SonarrInstance.objects.get(id=active_sonarr_id)
+                sonarr_form = SonarrInstanceForm(instance=instance)
+            except SonarrInstance.DoesNotExist:
+                active_sonarr_id = None
+                request.session.pop('active_sonarr_id', None)
+
     if request.method == "POST":
         form_type = request.POST.get('form_type', '')
         if form_type.startswith('mdblist'):
@@ -188,20 +205,26 @@ def home_view(request):
                 server_id = radarr_selection_form.cleaned_data['server_selection']
                 if server_id != 'new':
                     active_radarr_id = server_id
+                    request.session['active_radarr_id'] = server_id
                     instance = RadarrInstance.objects.get(id=server_id)
                     radarr_form = RadarrInstanceForm(instance=instance)
                 else:
+                    active_radarr_id = 'new'
+                    request.session['active_radarr_id'] = 'new'
                     radarr_form = RadarrInstanceForm()
-        
+
         elif form_type == 'sonarr_select':
             sonarr_selection_form = ServerSelectionForm(request.POST, choices=sonarr_choices, prefix='sonarr_select')
             if sonarr_selection_form.is_valid():
                 server_id = sonarr_selection_form.cleaned_data['server_selection']
                 if server_id != 'new':
                     active_sonarr_id = server_id
+                    request.session['active_sonarr_id'] = server_id
                     instance = SonarrInstance.objects.get(id=server_id)
                     sonarr_form = SonarrInstanceForm(instance=instance)
                 else:
+                    active_sonarr_id = 'new'
+                    request.session['active_sonarr_id'] = 'new'
                     sonarr_form = SonarrInstanceForm()
         
         elif form_type == 'radarr_save':
@@ -222,6 +245,7 @@ def home_view(request):
                 
                 if connection['status']:
                     instance.save()
+                    request.session['active_radarr_id'] = str(instance.id)
                     messages.success(request, "Radarr configuration saved successfully!")
                     return HttpResponseRedirect(reverse('home_view'))
                 else:
@@ -246,6 +270,7 @@ def home_view(request):
                 
                 if connection['status']:
                     instance.save()
+                    request.session['active_sonarr_id'] = str(instance.id)
                     messages.success(request, "Sonarr configuration saved successfully!")
                     return HttpResponseRedirect(reverse('home_view'))
                 else:
@@ -256,12 +281,16 @@ def home_view(request):
             instance_id = request.POST.get('instance_id')
             if instance_id:
                 RadarrInstance.objects.filter(id=instance_id).delete()
+                request.session.pop('active_radarr_id', None)
+                active_radarr_id = None
                 return HttpResponseRedirect(reverse('home_view'))
-        
+
         elif form_type == 'sonarr_delete':
             instance_id = request.POST.get('instance_id')
             if instance_id:
                 SonarrInstance.objects.filter(id=instance_id).delete()
+                request.session.pop('active_sonarr_id', None)
+                active_sonarr_id = None
                 return HttpResponseRedirect(reverse('home_view'))
         
 
