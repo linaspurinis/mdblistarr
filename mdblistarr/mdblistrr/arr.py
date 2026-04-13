@@ -68,6 +68,13 @@ class SonarrAPI():
         except Exception as e:
             return [{'result': f'Error connecting to Sonarr API: {str(e)}'}]
 
+    def get_episode_files(self):
+        """Fetch all episode files across all series in one call."""
+        try:
+            return self.connect.get_json(f"{self.url}/api/v3/episodefile", params={"apikey": self.apikey})
+        except Exception as e:
+            return [{'result': f'Error connecting to Sonarr API (episodefile): {str(e)}'}]
+
     def get_import_list_exclusions(self):
         """
         Import List Exclusions (Settings -> Import Lists -> List Exclusions).

@@ -109,7 +109,10 @@ def post_radarr_payload():
 
         sync_library_pref = Preferences.objects.filter(name='sync_library_status').first()
         if sync_library_pref and sync_library_pref.value == '1':
-            collection_add = [{'ids': {'tmdb': rec['tmdb']}} for rec in records if rec.get('exists')]
+            collection_add = [
+                {k: v for k, v in {'ids': {'tmdb': rec['tmdb']}, 'collected_at': rec.get('date_added')}.items() if v}
+                for rec in records if rec.get('exists')
+            ]
             collection_remove = [{'ids': {'tmdb': rec['tmdb']}} for rec in records if rec.get('exists') is False]
 
             chunk_size = 250
@@ -159,6 +162,20 @@ def post_sonarr_payload():
         sonarr_api = SonarrAPI()
         series = sonarr_api.get_series()
         exclusions = sonarr_api.get_import_list_exclusions()
+        episode_files = sonarr_api.get_episode_files()
+
+        # Build seriesId -> earliest file dateAdded map for accurate collected_at.
+        earliest_file_date = {}
+        if isinstance(episode_files, list):
+            for ef in episode_files:
+                if not isinstance(ef, dict):
+                    continue
+                series_id = ef.get('seriesId')
+                date_added = ef.get('dateAdded')
+                if not series_id or not date_added:
+                    continue
+                if series_id not in earliest_file_date or date_added < earliest_file_date[series_id]:
+                    earliest_file_date[series_id] = date_added
 
         provider = 2 # Sonarr JSON POST
 
@@ -275,7 +292,12 @@ def post_sonarr_payload():
                         seasons_with_files.append({'number': season_num})
 
                 if seasons_with_files:
-                    collection_add.append({'ids': {'tvdb': tvdb_id}, 'seasons': seasons_with_files})
+                    entry = {'ids': {'tvdb': tvdb_id}, 'seasons': seasons_with_files}
+                    sonarr_id = show.get('id')
+                    date_added = earliest_file_date.get(sonarr_id) or show.get('added')
+                    if date_added:
+                        entry['collected_at'] = date_added
+                    collection_add.append(entry)
                 elif records_by_tvdb.get(tvdb_id, {}).get('exists') is False:
                     collection_remove.append({'ids': {'tvdb': tvdb_id}})
 
