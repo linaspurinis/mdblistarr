@@ -68,10 +68,17 @@ class SonarrAPI():
         except Exception as e:
             return [{'result': f'Error connecting to Sonarr API: {str(e)}'}]
 
-    def get_episode_files(self):
-        """Fetch all episode files across all series in one call."""
+    def get_episodes(self, series_id):
+        """Fetch all episodes for a given series."""
         try:
-            return self.connect.get_json(f"{self.url}/api/v3/episodefile", params={"apikey": self.apikey})
+            return self.connect.get_json(f"{self.url}/api/v3/episode", params={"apikey": self.apikey, "seriesId": series_id})
+        except Exception as e:
+            return [{'result': f'Error connecting to Sonarr API (episode): {str(e)}'}]
+
+    def get_episode_files(self, series_id):
+        """Fetch all episode files for a given series."""
+        try:
+            return self.connect.get_json(f"{self.url}/api/v3/episodefile", params={"apikey": self.apikey, "seriesId": series_id})
         except Exception as e:
             return [{'result': f'Error connecting to Sonarr API (episodefile): {str(e)}'}]
 

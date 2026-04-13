@@ -162,20 +162,6 @@ def post_sonarr_payload():
         sonarr_api = SonarrAPI()
         series = sonarr_api.get_series()
         exclusions = sonarr_api.get_import_list_exclusions()
-        episode_files = sonarr_api.get_episode_files()
-
-        # Build seriesId -> earliest file dateAdded map for accurate collected_at.
-        earliest_file_date = {}
-        if isinstance(episode_files, list):
-            for ef in episode_files:
-                if not isinstance(ef, dict):
-                    continue
-                series_id = ef.get('seriesId')
-                date_added = ef.get('dateAdded')
-                if not series_id or not date_added:
-                    continue
-                if series_id not in earliest_file_date or date_added < earliest_file_date[series_id]:
-                    earliest_file_date[series_id] = date_added
 
         provider = 2 # Sonarr JSON POST
 
@@ -281,23 +267,45 @@ def post_sonarr_payload():
                     continue
 
                 seasons_with_files = []
-                for season in show.get('seasons') or []:
-                    if not isinstance(season, dict):
-                        continue
-                    season_num = season.get('seasonNumber')
-                    if season_num is None:
-                        continue
-                    s_stats = season.get('statistics') if isinstance(season.get('statistics'), dict) else {}
-                    if isinstance(s_stats.get('episodeFileCount'), int) and s_stats['episodeFileCount'] > 0:
-                        seasons_with_files.append({'number': season_num})
+                sonarr_id = show.get('id')
+                if not sonarr_id:
+                    continue
 
-                if seasons_with_files:
-                    entry = {'ids': {'tvdb': tvdb_id}, 'seasons': seasons_with_files}
-                    sonarr_id = show.get('id')
-                    date_added = earliest_file_date.get(sonarr_id) or show.get('added')
-                    if date_added:
-                        entry['collected_at'] = date_added
-                    collection_add.append(entry)
+                # Build episodeFileId -> dateAdded map.
+                ef_list = sonarr_api.get_episode_files(sonarr_id)
+                file_date_map = {}
+                if isinstance(ef_list, list):
+                    for ef in ef_list:
+                        if isinstance(ef, dict) and ef.get('id') and ef.get('dateAdded'):
+                            file_date_map[ef['id']] = ef['dateAdded']
+
+                if not file_date_map:
+                    continue
+
+                # Build per-episode seasons structure with individual collected_at.
+                episodes = sonarr_api.get_episodes(sonarr_id)
+                seasons_map = {}
+                if isinstance(episodes, list):
+                    for ep in episodes:
+                        if not isinstance(ep, dict) or not ep.get('hasFile'):
+                            continue
+                        season_num = ep.get('seasonNumber')
+                        ep_num = ep.get('episodeNumber')
+                        ef_id = ep.get('episodeFileId')
+                        if season_num is None or ep_num is None:
+                            continue
+                        ep_entry = {'number': ep_num}
+                        date = file_date_map.get(ef_id)
+                        if date:
+                            ep_entry['collected_at'] = date
+                        seasons_map.setdefault(season_num, []).append(ep_entry)
+
+                if seasons_map:
+                    seasons_with_files = [
+                        {'number': s_num, 'episodes': eps}
+                        for s_num, eps in sorted(seasons_map.items())
+                    ]
+                    collection_add.append({'ids': {'tvdb': tvdb_id}, 'seasons': seasons_with_files})
                 elif records_by_tvdb.get(tvdb_id, {}).get('exists') is False:
                     collection_remove.append({'ids': {'tvdb': tvdb_id}})
 
@@ -313,7 +321,7 @@ def post_sonarr_payload():
                 total_shows += updated.get('shows', 0)
                 total_seasons += updated.get('seasons', 0)
             if total_shows or total_seasons:
-                save_log(provider, 1, f'{sonarr_api.name}: Synced collection (shows={total_shows} seasons={total_seasons})')
+                save_log(provider, 1, f'{sonarr_api.name}: Synced collection (shows={total_shows} seasons={total_seasons} episodes={sum(len(s["episodes"]) for e in collection_add for s in e.get("seasons", []))})')
 
             total_removed = 0
             for i in range(0, len(collection_remove), chunk_size):
