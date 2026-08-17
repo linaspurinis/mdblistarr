@@ -92,13 +92,14 @@ class ServerSelectionForm(forms.Form):
 class RadarrInstanceForm(forms.ModelForm):
     class Meta:
         model = RadarrInstance
-        fields = ['name', 'url', 'apikey', 'quality_profile', 'root_folder']
+        fields = ['name', 'url', 'apikey', 'quality_profile', 'root_folder', 'minimum_availability']
         widgets = {
             'name': forms.TextInput(attrs={'placeholder': 'Instance Name', 'class': 'form-control'}),
             'url': forms.TextInput(attrs={'placeholder': 'Radarr URL', 'class': 'form-control'}),
             'apikey': forms.TextInput(attrs={'placeholder': 'Radarr API Key', 'class': 'form-control'}),
             'quality_profile': forms.Select(attrs={'class': 'form-control'}),
             'root_folder': forms.Select(attrs={'class': 'form-control'}),
+            'minimum_availability': forms.Select(attrs={'class': 'form-control'}),
         }
     
     def __init__(self, *args, **kwargs):

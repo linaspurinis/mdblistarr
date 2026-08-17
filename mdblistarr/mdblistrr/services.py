@@ -150,6 +150,28 @@ class MDBListarr:
             logger.error(f"Error getting Radarr root folder: {str(e)}")
             return ""
 
+    def get_radarr_minimum_availability(self, instance_id=None):
+        """
+        Get minimum availability for a Radarr instance.
+        Returns the minimum availability of the specified instance or the first available instance if not found.
+        """
+        try:
+            if instance_id:
+                instance = RadarrInstance.objects.filter(id=instance_id).first()
+                if instance and instance.minimum_availability:
+                    return instance.minimum_availability
+
+            first_instance = RadarrInstance.objects.filter(
+                minimum_availability__isnull=False
+            ).first()
+            if first_instance:
+                return first_instance.minimum_availability
+
+            return 'released'
+        except Exception as e:
+            logger.error(f"Error getting Radarr minimum availability: {str(e)}")
+            return 'released'
+
     def get_sonarr_quality_profile(self, instance_id=None):
         """
         Get quality profile ID for a Radarr instance.

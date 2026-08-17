@@ -458,7 +458,8 @@ def get_mdblist_queue_to_arr():
                 movie_request_json = {
                     "title": item['title'],
                     "tmdbid": item['tmdbid'],
-                    "monitored": True, 
+                    "monitored": True,
+                    "minimumAvailability": mdblistarr.get_radarr_minimum_availability(instance_id),
                     "addOptions": {"searchForMovie": True},
                     "qualityProfileId": mdblistarr.get_radarr_quality_profile(instance_id),
                     "rootFolderPath": mdblistarr.get_radarr_root_folder(instance_id)

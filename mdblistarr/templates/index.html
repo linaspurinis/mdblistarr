@@ -194,6 +194,15 @@
                             </div>
                         </div>
 
+                        <!-- Minimum Availability field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ radarr_form.minimum_availability.label_tag }}
+                            {{ radarr_form.minimum_availability }}
+                            <div class="invalid-feedback">
+                                {{ radarr_form.minimum_availability.errors.0 }}
+                            </div>
+                        </div>
+
                         <div class="d-grid gap-2 d-md-flex">
                             <button type="submit" class="btn btn-success">Save</button>
                             <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="test_radarr" class="btn btn-primary">Test Connection</button>

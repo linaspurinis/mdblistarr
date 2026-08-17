@@ -4,8 +4,6 @@ cp /usr/src/app/mdblist/urls.py.1 /usr/src/app/mdblist/urls.py
 if [ "${RESET_DB}" = "1" ]; then
     rm -f /usr/src/db/db.sqlite3
 fi
-find . -path "*/migrations/*.py" -not -name "__init__.py" -delete
-find . -path "*/migrations/*.pyc"  -delete
 python /usr/src/app/manage.py makemigrations
 python /usr/src/app/manage.py migrate
 python /usr/src/app/manage.py shell << EOF
