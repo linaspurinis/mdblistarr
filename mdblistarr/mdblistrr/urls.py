@@ -4,6 +4,7 @@ from . import views
 from .log import log_view
 
 urlpatterns = [
+    path('setup/', views.setup_view, name='setup'),
     path('', home_view, name='home_view'),
     path('log', log_view, name='log_view'),
     path('test_radarr_connection/', views.test_radarr_connection, name='test_radarr_connection'),

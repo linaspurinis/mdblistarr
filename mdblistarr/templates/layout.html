@@ -39,7 +39,7 @@
                 <span class="navbar-toggler-icon"></span>
               </button>
               <div class="collapse navbar-collapse" id="navbarNavDropdown">
-                <ul class="navbar-nav">
+                <ul class="navbar-nav me-auto">
                   <li class="nav-item">
                     <a class="nav-link" aria-current="page" href="/">Configure</a>
                   </li>
@@ -47,6 +47,12 @@
                     <a class="nav-link" href="/log">Log</a>
                   </li>
                 </ul>
+                {% if request.user.is_authenticated %}
+                <form method="post" action="{% url 'logout' %}" class="d-flex">
+                  {% csrf_token %}
+                  <button class="btn btn-outline-secondary btn-sm" type="submit">Logout</button>
+                </form>
+                {% endif %}
               </div>
             </div>
           </nav>

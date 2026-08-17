@@ -6,6 +6,13 @@ from lxml import html
 
 logging.basicConfig(format='%(asctime)s severity=%(levelname)s filename=%(filename)s line=%(lineno)s message="%(message)s"', level=logging.INFO)
 
+SENSITIVE_RE = re.compile(r"(?i)(apikey=)[^&\s]+|(?:bearer\s+)[A-Za-z0-9._~+\-/=]+|([A-Za-z0-9_-]{20,})")
+
+def sanitize_text(value):
+    if value is None:
+        return value
+    return SENSITIVE_RE.sub(lambda m: (m.group(1) + "<redacted>") if m.group(1) else "<redacted>", str(value))
+
 DEFAULT_HEADERS = {
     'accept':'*/*',
     # Avoid advertising brotli unless we're sure the runtime can decode it.

@@ -35,10 +35,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&ru)tr*qud#(%0i4%!8u5ime_2s@f8%kxa*y=iiad48ysu+(t-'
+from mdblistrr.runtime_secrets import resolve_secret
+SECRET_KEY = resolve_secret('DJANGO_SECRET_KEY', required=not os.environ.get('MDBLISTARR_ALLOW_INSECURE_DEV_SECRET'), generate=not os.environ.get('MDBLISTARR_ALLOW_INSECURE_DEV_SECRET')) or 'dev-only-insecure-secret'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = os.environ.get('DJANGO_DEBUG', '0').lower() in {'1', 'true', 'yes'}
 
 ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', ['*'])
 CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
@@ -57,6 +58,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
     'mdblistrr.apps.MdblistrrConfig', # new
     'django_scheduled_tasks',
 ]
@@ -73,6 +75,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'mdblistrr.middleware.StaffRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -150,3 +153,16 @@ STATIC_ROOT = os.path.join(BASE_DIR, "static")
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'home_view'
+LOGOUT_REDIRECT_URL = 'login'
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax')
+CSRF_COOKIE_SAMESITE = os.environ.get('CSRF_COOKIE_SAMESITE', 'Lax')
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', '0').lower() in {'1', 'true', 'yes'}
+CSRF_COOKIE_SECURE = os.environ.get('CSRF_COOKIE_SECURE', '0').lower() in {'1', 'true', 'yes'}
+if os.environ.get('DJANGO_SECURE_PROXY_SSL_HEADER'):
+    SECURE_PROXY_SSL_HEADER = tuple(os.environ['DJANGO_SECURE_PROXY_SSL_HEADER'].split(',', 1))

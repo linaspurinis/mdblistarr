@@ -1,0 +1,14 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="container" style="max-width: 480px; margin-top: 4rem;">
+  <h1 class="h3 mb-3">Sign in to MDBListarr</h1>
+  <form method="post" action="{% url 'login' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    {{ form.non_field_errors }}
+    <div class="mb-3">{{ form.username.label_tag }} {{ form.username }}</div>
+    <div class="mb-3">{{ form.password.label_tag }} {{ form.password }}</div>
+    <button class="btn btn-primary" type="submit">Sign in</button>
+  </form>
+</div>
+{% endblock %}

@@ -203,6 +203,25 @@
                             </div>
                         </div>
 
+                        <!-- Tags field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ radarr_form.tags.label_tag }}
+                            <div id="radarr_tags_container">
+                                {% for value, text in radarr_form.fields.tags.choices %}
+                                    <div class="form-check form-check-inline">
+                                        <input type="checkbox" name="tags" value="{{ value }}" class="form-check-input" id="radarr_tag_{{ value }}"{% if value in radarr_form.initial.tags %} checked{% endif %}>
+                                        <label class="form-check-label" for="radarr_tag_{{ value }}">{{ text }}</label>
+                                    </div>
+                                {% empty %}
+                                    <div class="text-muted small">No tags found. Create tags directly in Radarr, then use Test Connection to refresh this list.</div>
+                                {% endfor %}
+                            </div>
+                            <div class="invalid-feedback">
+                                {{ radarr_form.tags.errors.0 }}
+                            </div>
+                            <small class="form-text text-muted">{{ radarr_form.tags.help_text }}</small>
+                        </div>
+
                         <div class="d-grid gap-2 d-md-flex">
                             <button type="submit" class="btn btn-success">Save</button>
                             <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="test_radarr" class="btn btn-primary">Test Connection</button>
@@ -313,6 +332,34 @@
                             <div class="invalid-feedback">
                                 {{ sonarr_form.root_folder.errors.0 }}
                             </div>
+                        </div>
+
+                        <!-- Monitor field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ sonarr_form.monitor.label_tag }}
+                            {{ sonarr_form.monitor }}
+                            <div class="invalid-feedback">
+                                {{ sonarr_form.monitor.errors.0 }}
+                            </div>
+                        </div>
+
+                        <!-- Tags field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ sonarr_form.tags.label_tag }}
+                            <div id="sonarr_tags_container">
+                                {% for value, text in sonarr_form.fields.tags.choices %}
+                                    <div class="form-check form-check-inline">
+                                        <input type="checkbox" name="tags" value="{{ value }}" class="form-check-input" id="sonarr_tag_{{ value }}"{% if value in sonarr_form.initial.tags %} checked{% endif %}>
+                                        <label class="form-check-label" for="sonarr_tag_{{ value }}">{{ text }}</label>
+                                    </div>
+                                {% empty %}
+                                    <div class="text-muted small">No tags found. Create tags directly in Sonarr, then use Test Connection to refresh this list.</div>
+                                {% endfor %}
+                            </div>
+                            <div class="invalid-feedback">
+                                {{ sonarr_form.tags.errors.0 }}
+                            </div>
+                            <small class="form-text text-muted">{{ sonarr_form.tags.help_text }}</small>
                         </div>
 
                         <div class="d-grid gap-2 d-md-flex">
@@ -515,7 +562,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': form.querySelector('input[name="csrfmiddlewaretoken"]').value
                 },
-                body: JSON.stringify({ url, apikey })
+                body: JSON.stringify({ url, apikey, instance_id: form.querySelector('input[name="instance_id"]').value })
             })
             .then(response => response.json())
             .then(data => {
@@ -554,7 +601,42 @@ document.addEventListener('DOMContentLoaded', function() {
                             rootSelect.value = currentRootValue;
                         }
                     }
-                    
+
+                    // Update the tags checkboxes
+                    const tagsContainer = document.getElementById(isRadarr ? 'radarr_tags_container' : 'sonarr_tags_container');
+                    if (tagsContainer) {
+                        const currentTagValues = Array.from(tagsContainer.querySelectorAll('input[name="tags"]:checked')).map(cb => cb.value);
+                        tagsContainer.innerHTML = '';
+                        if (data.tags && data.tags.length) {
+                            data.tags.forEach(tag => {
+                                const wrapper = document.createElement('div');
+                                wrapper.className = 'form-check form-check-inline';
+
+                                const checkbox = document.createElement('input');
+                                checkbox.type = 'checkbox';
+                                checkbox.name = 'tags';
+                                checkbox.value = tag[0];
+                                checkbox.className = 'form-check-input';
+                                checkbox.id = (isRadarr ? 'radarr_tag_' : 'sonarr_tag_') + tag[0];
+                                checkbox.checked = currentTagValues.includes(tag[0]);
+
+                                const label = document.createElement('label');
+                                label.className = 'form-check-label';
+                                label.setAttribute('for', checkbox.id);
+                                label.textContent = tag[1];
+
+                                wrapper.appendChild(checkbox);
+                                wrapper.appendChild(label);
+                                tagsContainer.appendChild(wrapper);
+                            });
+                        } else {
+                            const empty = document.createElement('div');
+                            empty.className = 'text-muted small';
+                            empty.textContent = 'No tags found. Create tags directly in ' + (isRadarr ? 'Radarr' : 'Sonarr') + ', then use Test Connection to refresh this list.';
+                            tagsContainer.appendChild(empty);
+                        }
+                    }
+
                     // Show success message
                     const apikeyField = form.querySelector('input[name="apikey"]');
                     apikeyField.classList.remove('is-invalid');

@@ -459,10 +459,11 @@ def get_mdblist_queue_to_arr():
                     "title": item['title'],
                     "tmdbid": item['tmdbid'],
                     "monitored": True,
-                    "minimumAvailability": mdblistarr.get_radarr_minimum_availability(instance_id),
                     "addOptions": {"searchForMovie": True},
                     "qualityProfileId": mdblistarr.get_radarr_quality_profile(instance_id),
-                    "rootFolderPath": mdblistarr.get_radarr_root_folder(instance_id)
+                    "rootFolderPath": mdblistarr.get_radarr_root_folder(instance_id),
+                    "minimumAvailability": mdblistarr.get_radarr_minimum_availability(instance_id),
+                    "tags": mdblistarr.get_radarr_tags(instance_id)
                 }
 
                 radarr_api = RadarrAPI(instance_id=instance_id)
@@ -510,10 +511,15 @@ def get_mdblist_queue_to_arr():
                 show_request_json = {
                     "title": item['title'],
                     "tvdbid": item['tvdbid'],
-                    "monitored": True, 
-                    "addOptions": {"searchForMissingEpisodes": True},
+                    "monitored": True,
+                    "seasonFolder": True,
+                    "addOptions": {
+                        "searchForMissingEpisodes": True,
+                        "monitor": mdblistarr.get_sonarr_monitor(instance_id)
+                    },
                     "qualityProfileId": mdblistarr.get_sonarr_quality_profile(instance_id),
-                    "rootFolderPath": mdblistarr.get_sonarr_root_folder(instance_id)
+                    "rootFolderPath": mdblistarr.get_sonarr_root_folder(instance_id),
+                    "tags": mdblistarr.get_sonarr_tags(instance_id)
                 }
 
                 sonarr_api = SonarrAPI(instance_id=instance_id)

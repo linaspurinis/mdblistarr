@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="container" style="max-width: 560px; margin-top: 3rem;">
+  <h1 class="h3 mb-3">Initial MDBListarr setup</h1>
+  <p class="text-body-secondary">Create the first administrator account. This account will control MDBListarr configuration, connections, OAuth actions and logs. Store the password securely.</p>
+  <form method="post" action="{% url 'setup' %}">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="mb-3">{{ form.username.label_tag }} {{ form.username }} {{ form.username.errors }}</div>
+    <div class="mb-3">{{ form.password1.label_tag }} {{ form.password1 }} {{ form.password1.errors }}</div>
+    <div class="mb-3">{{ form.password2.label_tag }} {{ form.password2 }} {{ form.password2.errors }}</div>
+    <button class="btn btn-primary" type="submit">Create administrator</button>
+  </form>
+</div>
+{% endblock %}

@@ -14,20 +14,18 @@ class MDBListarr:
         self._get_config()
 
     def _get_config(self):
-        apikey_pref = Preferences.objects.filter(name="mdblist_apikey").first()
-        if apikey_pref:
-            self.mdblist_apikey = apikey_pref.value
+        self.mdblist_apikey = Preferences.get_secret("mdblist_apikey")
 
-        access_token_pref = Preferences.objects.filter(name="mdblist_access_token").first()
-        if access_token_pref and access_token_pref.value:
-            refresh_pref = Preferences.objects.filter(name="mdblist_refresh_token").first()
-            expires_pref = Preferences.objects.filter(name="mdblist_token_expires_at").first()
-            client_id_pref = Preferences.objects.filter(name="mdblist_client_id").first()
+        access_token = Preferences.get_secret("mdblist_access_token")
+        if access_token:
+            refresh_token = Preferences.get_secret("mdblist_refresh_token")
+            expires_at = Preferences.get_value("mdblist_token_expires_at")
+            client_id = Preferences.get_value("mdblist_client_id")
             self.mdblist = MdblistAPI(
-                access_token=access_token_pref.value,
-                refresh_token=refresh_pref.value if refresh_pref else None,
-                token_expires_at=float(expires_pref.value) if expires_pref and expires_pref.value else None,
-                client_id=client_id_pref.value if client_id_pref else None,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                token_expires_at=float(expires_at) if expires_at else None,
+                client_id=client_id,
             )
         elif self.mdblist_apikey:
             self.mdblist = MdblistAPI(apikey=self.mdblist_apikey)
@@ -78,6 +76,32 @@ class MDBListarr:
                     choices_list.append((folder["path"], folder["path"]))
         except Exception as e:
             logger.error(f"Error fetching Sonarr root folders: {str(e)}")
+        return choices_list
+
+    def get_radarr_tag_choices(self, url, apikey):
+        choices_list = []
+        try:
+            radarr = RadarrAPI(url, apikey)
+            if radarr:
+                tags = radarr.get_tags()
+                for tag in tags:
+                    if isinstance(tag, dict) and tag.get('id') is not None and tag.get('label'):
+                        choices_list.append((str(tag['id']), tag['label']))
+        except Exception as e:
+            logger.error(f"Error fetching Radarr tags: {str(e)}")
+        return choices_list
+
+    def get_sonarr_tag_choices(self, url, apikey):
+        choices_list = []
+        try:
+            sonarr = SonarrAPI(url, apikey)
+            if sonarr:
+                tags = sonarr.get_tags()
+                for tag in tags:
+                    if isinstance(tag, dict) and tag.get('id') is not None and tag.get('label'):
+                        choices_list.append((str(tag['id']), tag['label']))
+        except Exception as e:
+            logger.error(f"Error fetching Sonarr tags: {str(e)}")
         return choices_list
 
     def test_radarr_connection(self, url, apikey):
@@ -172,6 +196,34 @@ class MDBListarr:
             logger.error(f"Error getting Radarr minimum availability: {str(e)}")
             return 'released'
 
+    def get_radarr_tags(self, instance_id=None):
+        """
+        Get the configured Radarr tag IDs for an instance. Tags are picked from
+        Radarr's existing tag list in the UI, so no resolution/creation is needed here.
+        """
+        try:
+            instance = RadarrInstance.objects.filter(id=instance_id).first() if instance_id else None
+            if not instance or not instance.tags:
+                return []
+            return [int(t) for t in instance.tags.split(',') if t.strip().isdigit()]
+        except Exception as e:
+            logger.error(f"Error parsing Radarr tags: {str(e)}")
+            return []
+
+    def get_sonarr_tags(self, instance_id=None):
+        """
+        Get the configured Sonarr tag IDs for an instance. Tags are picked from
+        Sonarr's existing tag list in the UI, so no resolution/creation is needed here.
+        """
+        try:
+            instance = SonarrInstance.objects.filter(id=instance_id).first() if instance_id else None
+            if not instance or not instance.tags:
+                return []
+            return [int(t) for t in instance.tags.split(',') if t.strip().isdigit()]
+        except Exception as e:
+            logger.error(f"Error parsing Sonarr tags: {str(e)}")
+            return []
+
     def get_sonarr_quality_profile(self, instance_id=None):
         """
         Get quality profile ID for a Radarr instance.
@@ -215,6 +267,28 @@ class MDBListarr:
         except Exception as e:
             logger.error(f"Error getting Radarr root folder: {str(e)}")
             return ""
+
+    def get_sonarr_monitor(self, instance_id=None):
+        """
+        Get the "monitor" add-option for a Sonarr instance.
+        Returns the monitor option of the specified instance or the first available instance if not found.
+        """
+        try:
+            if instance_id:
+                instance = SonarrInstance.objects.filter(id=instance_id).first()
+                if instance and instance.monitor:
+                    return instance.monitor
+
+            first_instance = SonarrInstance.objects.filter(
+                monitor__isnull=False
+            ).first()
+            if first_instance:
+                return first_instance.monitor
+
+            return 'all'
+        except Exception as e:
+            logger.error(f"Error getting Sonarr monitor option: {str(e)}")
+            return 'all'
 
 
 @lru_cache(maxsize=1)

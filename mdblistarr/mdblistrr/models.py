@@ -2,15 +2,67 @@
 from django.db import models
 from django.dispatch import receiver
 from django.db.models.signals import pre_save, post_save, pre_delete
+from .crypto import decrypt, encrypt, SECRET_PREF_NAMES
+
+class EncryptedCharField(models.CharField):
+    def from_db_value(self, value, expression, connection):
+        return decrypt(value)
+
+    def to_python(self, value):
+        return decrypt(value)
+
+    def get_prep_value(self, value):
+        return encrypt(value)
 
 class Preferences(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255, unique=True)
-    value = models.CharField(max_length=255, null=True)
-    
+    value = models.CharField(max_length=2048, null=True)
+
+    @classmethod
+    def secret_names(cls):
+        return SECRET_PREF_NAMES
+
+    @classmethod
+    def get_value(cls, name, default=None):
+        pref = cls.objects.filter(name=name).first()
+        return pref.value if pref is not None else default
+
+    @classmethod
+    def set_value(cls, name, value):
+        pref, _ = cls.objects.update_or_create(name=name, defaults={"value": value})
+        return pref
+
+    @classmethod
+    def get_secret(cls, name, default=None):
+        if name not in SECRET_PREF_NAMES:
+            raise ValueError(f"{name} is not configured as a secret preference")
+        pref = cls.objects.filter(name=name).first()
+        if pref is None or pref.value in (None, ""):
+            return default
+        return decrypt(pref.value)
+
+    @classmethod
+    def set_secret(cls, name, value):
+        if name not in SECRET_PREF_NAMES:
+            raise ValueError(f"{name} is not configured as a secret preference")
+        encrypted = encrypt(value)
+        pref, _ = cls.objects.update_or_create(name=name, defaults={"value": encrypted})
+        pref.value = encrypted
+        return pref
+
+    @classmethod
+    def clear_secret(cls, name):
+        return cls.set_secret(name, "")
+
+    def save(self, *args, **kwargs):
+        if self.name in SECRET_PREF_NAMES:
+            self.value = encrypt(self.value)
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name_plural = "preferences"
-        
+
     def __str__(self):
         return self.name
 
@@ -25,26 +77,41 @@ class RadarrInstance(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
     url = models.CharField(max_length=255)
-    apikey = models.CharField(max_length=255)
+    apikey = EncryptedCharField(max_length=2048)
     quality_profile = models.CharField(max_length=255)
     root_folder = models.CharField(max_length=255)
     minimum_availability = models.CharField(
         max_length=20, choices=MINIMUM_AVAILABILITY_CHOICES, default='released'
     )
+    tags = models.CharField(max_length=500, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.name
 
 class SonarrInstance(models.Model):
+    MONITOR_CHOICES = [
+        ('all', 'All Episodes'),
+        ('future', 'Future Episodes'),
+        ('missing', 'Missing Episodes'),
+        ('existing', 'Existing Episodes'),
+        ('recent', 'Recent Episodes'),
+        ('pilot', 'Pilot Episode'),
+        ('firstSeason', 'First Season'),
+        ('latestSeason', 'Latest Season'),
+        ('none', 'None'),
+    ]
+
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
     url = models.CharField(max_length=255)
-    apikey = models.CharField(max_length=255)
+    apikey = EncryptedCharField(max_length=2048)
     quality_profile = models.CharField(max_length=255)
     root_folder = models.CharField(max_length=255)
+    monitor = models.CharField(max_length=20, choices=MONITOR_CHOICES, default='all')
+    tags = models.CharField(max_length=500, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     def __str__(self):
         return self.name
 

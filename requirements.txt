@@ -16,3 +16,5 @@ tenacity>=8.2
 
 # Optional but recommended
 python-dotenv>=1.0
+
+cryptography>=42

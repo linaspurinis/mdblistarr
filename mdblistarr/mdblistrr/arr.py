@@ -104,6 +104,12 @@ class SonarrAPI():
         except Exception:
             return {'errorMessage': traceback.format_exc()}
 
+    def get_tags(self):
+        try:
+            return self.connect.get_json(f"{self.url}/api/v3/tag", params={"apikey": self.apikey})
+        except Exception as e:
+            return [{'result': f'Error connecting to Sonarr API (tag): {str(e)}'}]
+
 class RadarrAPI():
     def __init__(self, url=None, apikey=None, instance_id=None):
         self.connect = Connect()
@@ -237,6 +243,12 @@ class RadarrAPI():
             json={"name": "MoviesSearch", "movieIds": [movie_id]},
             params={"apikey": self.apikey},
         )
+
+    def get_tags(self):
+        try:
+            return self.connect.get_json(f"{self.url}/api/v3/tag", params={"apikey": self.apikey})
+        except Exception as e:
+            return [{'result': f'Error connecting to Radarr API (tag): {str(e)}'}]
 
 class MdblistAPI():
     def __init__(self, apikey=None, access_token=None, refresh_token=None, token_expires_at=None, client_id=None):
