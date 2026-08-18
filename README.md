@@ -11,15 +11,32 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr and Sonar
 - Connects MDBList with Radarr and Sonarr.
 - Uploads your current library state back to MDBList on schedule.
 - Pulls MDBList queue items and sends add requests to Radarr/Sonarr.
-- Supports multiple Radarr/Sonarr instances.
+- Supports multiple Radarr/Sonarr instances, each with its own quality profile, root folder, tags, and (Sonarr) monitor option.
+- Login required — the app creates its first administrator account on first run.
+- API keys and MDBList tokens are encrypted at rest.
 - Runs as a simple Docker container with persistent DB volume.
 
 ### Basic workflow
 
-1. Connect your MDBList account via OAuth (or enter an API key manually).
-2. Add your Radarr and Sonarr instances.
-3. Set quality profile and root folder mappings per instance.
+1. On first visit, create the administrator account (or set `MDBLISTARR_ADMIN_USERNAME`/`MDBLISTARR_ADMIN_PASSWORD` beforehand to skip the setup screen — see [Authentication](#authentication)).
+2. Connect your MDBList account via OAuth (or enter an API key manually).
+3. Add your Radarr and Sonarr instances, including quality profile, root folder, tags, and (Sonarr) monitor option.
 4. Let scheduled sync keep MDBList and your ARR apps in sync.
+
+## New in v2.4.0
+
+- **Authentication required**: every page now sits behind login. On first run you're taken to a one-time setup screen to create the administrator account, instead of the previous default `admin`/`admin` credentials created automatically on every boot.
+- **Encrypted secrets at rest**: Radarr/Sonarr API keys and MDBList OAuth tokens/API key are now encrypted in the database. A per-install encryption key is generated automatically and persisted under the existing DB volume (`/usr/src/db/secrets/`) — no extra volume needed.
+- **Per-instance tags**: pick which Radarr/Sonarr tags get applied to everything added through a given instance, straight from that instance's existing tag list.
+- **Sonarr monitor option**: choose the `monitor` behavior (all/future/missing/existing/recent/pilot/firstSeason/latestSeason/none) used when adding a show, per Sonarr instance.
+- Fix: `seasonFolder` is now explicitly sent as `true` when adding shows — previously it silently defaulted to `false` via the Sonarr API, so episodes could land outside season folders.
+- Fix: the entrypoint no longer runs `makemigrations` on every boot, which could silently drift schema on persistent deployments. Existing databases are reconciled automatically on upgrade.
+
+### Authentication
+
+- On first run, visiting the app redirects to a one-time `/setup` page to create the administrator account.
+- To skip the setup screen (e.g. for automated deployments), set `MDBLISTARR_ADMIN_USERNAME` (defaults to `admin`) and `MDBLISTARR_ADMIN_PASSWORD` before first boot.
+- **Upgrading an existing deployment**: if your admin account still uses the old default `admin`/`admin` password, it will be disabled on upgrade and you'll be sent through `/setup` again to create a new one — set `MDBLISTARR_ADMIN_PASSWORD` beforehand if you'd rather avoid that. If you'd already changed that password, nothing changes except you'll need to log in once, the same as any first visit after this update.
 
 ## New in v2.3.0
 
