@@ -1,6 +1,6 @@
 # mdblistarr
 
-Companion app for [mdblist.com](https://mdblist.com) for better Radarr and Sonarr integration.
+Companion app for [mdblist.com](https://mdblist.com) for better Radarr, Sonarr, and Plex integration.
 
 ## Docker Hub image
 
@@ -12,6 +12,7 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr and Sonar
 - Uploads your current library state back to MDBList on schedule.
 - Pulls MDBList queue items and sends add requests to Radarr/Sonarr.
 - Supports multiple Radarr/Sonarr instances, each with its own quality profile, root folder, tags, and (Sonarr) monitor option.
+- Optional Plex integration: stamps posters with the mdblist score and age rating, and can sync the mdblist score into Plex's Audience Rating field so you can sort your library by it.
 - Login required — the app creates its first administrator account on first run.
 - API keys and MDBList tokens are encrypted at rest.
 - Runs as a simple Docker container with persistent DB volume.
@@ -22,6 +23,16 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr and Sonar
 2. Connect your MDBList account via OAuth (or enter an API key manually).
 3. Add your Radarr and Sonarr instances, including quality profile, root folder, tags, and (Sonarr) monitor option.
 4. Let scheduled sync keep MDBList and your ARR apps in sync.
+
+## New in v2.5.0
+
+- **Plex poster badges**: connect a Plex server and mdblistarr stamps each movie/show poster with the mdblist score (top-left, color-coded the same way mdblist.com and the iOS app color it — green/amber/red by score) and age rating (bottom-right). Toggle either badge on/off per Plex server.
+- **Smart re-stamping, not brute force**: posters are only redrawn when the mdblist score/age rating or the poster art itself actually changed — a repeat sync is a fast no-op for everything already up to date. The original, un-badged poster is always kept cached so re-stamps never draw badges on top of badges.
+- **Optional Audience Rating sync**: overwrite Plex's Audience Rating with the mdblist score (locked, so Plex won't revert it on its own metadata refresh) so you can sort your library by mdblist score. Off by default; the original rating is saved before the first override.
+- **Reset to Original**: restores posters and ratings back to what Plex had before mdblistarr touched them, scoped to your currently-selected libraries (same scope as the sync itself).
+- **Background sync with live progress**: "Sync Now" runs in the background instead of blocking the page — watch live progress (items processed, stamped/skipped/errors, current title) and cancel a running sync at any point.
+
+- Connect via a Plex PIN-based flow (click "Connect with Plex", authorize on plex.tv) — no manual token copying.
 
 ## New in v2.4.0
 
