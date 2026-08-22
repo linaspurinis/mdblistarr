@@ -4,6 +4,7 @@ import traceback
 from datetime import timedelta
 from pathlib import Path
 
+from django.db import IntegrityError
 from django.utils import timezone
 
 from .models import Log, PlexInstance, PlexPosterState, PlexSyncRun
@@ -115,9 +116,14 @@ def _recheck_interval(item):
 def _needs_mdblist_check(item, state, now, instance):
     if not state:
         return True
-    thumb_is_ours = bool(item['thumb']) and item['thumb'] == state.last_uploaded_thumb_key
-    if not thumb_is_ours:
-        return True
+    # Only gate on "is the poster still ours" when badges are actually being
+    # stamped — with both badge toggles off, last_uploaded_thumb_key is never
+    # set (there's no poster upload to set it), so this would otherwise always
+    # read as a foreign change and force a full recheck every run.
+    if instance.badge_score_enabled or instance.badge_age_rating_enabled:
+        thumb_is_ours = bool(item['thumb']) and item['thumb'] == state.last_uploaded_thumb_key
+        if not thumb_is_ours:
+            return True
     if instance.sync_audience_rating_enabled and state.synced_audience_rating is None:
         return True  # rating sync just turned on; this item has never been rated by us
     stale = not state.mdblist_checked_at or (now - state.mdblist_checked_at) > _recheck_interval(item)
@@ -321,7 +327,13 @@ def sync_plex_posters(run=None):
     if run is None:
         if PlexSyncRun.objects.filter(status='running').exists():
             return {'response': 'AlreadyRunning'}
-        run = PlexSyncRun.objects.create(status='running', started_at=timezone.now(), kind='sync')
+        try:
+            run = PlexSyncRun.objects.create(status='running', started_at=timezone.now(), kind='sync')
+        except IntegrityError:
+            # Lost the race to another run that started between the check
+            # above and this create — the DB-level partial unique constraint
+            # (uniq_plexsyncrun_running) is the actual single-flight guard.
+            return {'response': 'AlreadyRunning'}
 
     try:
         reset_mdblistarr()
@@ -403,11 +415,19 @@ def _reset_item(plex, state):
         if cache_path.exists():
             if not plex.upload_poster(state.rating_key, cache_path.read_bytes()):
                 had_error = True
-        # No cached original on disk: nothing we can restore poster-wise, but
-        # that's not itself an error worth failing the whole item over.
+        else:
+            # Cached original is gone but Plex may still be showing our
+            # badge-stamped poster. Treat this as an error and keep the state
+            # row rather than deleting it — deleting here would make the next
+            # sync treat the still-stamped image as a fresh "original" and
+            # double-stamp it (see _original_poster_bytes's matching guard).
+            had_error = True
 
     if state.synced_audience_rating is not None:
-        restore_value = state.original_audience_rating if state.original_audience_rating is not None else 0
+        # original_audience_rating is None when the item genuinely had no
+        # rating before we touched it — restore to "unrated", not a
+        # fabricated 0/10, by clearing the override entirely.
+        restore_value = state.original_audience_rating if state.original_audience_rating is not None else ''
         if not plex.set_audience_rating(state.section_id, state.section_type, state.rating_key, restore_value, locked=False):
             had_error = True
 
@@ -430,7 +450,13 @@ def reset_plex_posters(run=None):
     if run is None:
         if PlexSyncRun.objects.filter(status='running').exists():
             return {'response': 'AlreadyRunning'}
-        run = PlexSyncRun.objects.create(status='running', started_at=timezone.now(), kind='reset')
+        try:
+            run = PlexSyncRun.objects.create(status='running', started_at=timezone.now(), kind='reset')
+        except IntegrityError:
+            # Lost the race to another run that started between the check
+            # above and this create — the DB-level partial unique constraint
+            # (uniq_plexsyncrun_running) is the actual single-flight guard.
+            return {'response': 'AlreadyRunning'}
 
     try:
         states = list(poster_states_in_scope().select_related('plex_instance'))

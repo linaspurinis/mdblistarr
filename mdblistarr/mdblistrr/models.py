@@ -146,6 +146,15 @@ class PlexSyncRun(models.Model):
     cancel_requested = models.BooleanField(default=False)
     error_message = models.TextField(blank=True, default='')
 
+    class Meta:
+        constraints = [
+            # DB-level guarantee that at most one run is 'running' at a time,
+            # so two near-simultaneous requests can't both pass the
+            # application-level "is anything running" check and spawn
+            # concurrent sync/reset threads.
+            models.UniqueConstraint(fields=['status'], condition=models.Q(status='running'), name='uniq_plexsyncrun_running'),
+        ]
+
     def __str__(self):
         return f"PlexSyncRun#{self.id} {self.status}"
 

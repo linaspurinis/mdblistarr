@@ -2,13 +2,12 @@ import io
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-# Geometry matched to the iOS app's MDBScoreBadge (Components/MDBScoreBadge.swift):
-# minWidth 30 / minHeight 22 / cornerRadius 6 / font size 12 bold, designed
-# against a ~115pt poster (the standard 3-column grid card width) — expressed
-# here as ratios of the poster's pixel width so it scales to any resolution.
+# Badge geometry: minWidth 30 / minHeight 22 / cornerRadius 6 / font size 12
+# bold, designed against a ~115px poster width — expressed here as ratios of
+# the poster's pixel width so it scales to any resolution.
 # BADGE_SIZE_SCALE shrinks the badge box (height/min-width/radius) while
-# BADGE_FONT_RATIO stays pinned to the verified iOS font size — box got
-# smaller than the reference, font didn't.
+# BADGE_FONT_RATIO stays independent of it, so the box can shrink without the
+# font shrinking along with it.
 BADGE_MARGIN_RATIO = 0.035
 BADGE_SIZE_SCALE = 0.82
 BADGE_HEIGHT_RATIO = (22 / 115) * BADGE_SIZE_SCALE
@@ -18,16 +17,16 @@ BADGE_FONT_SCALE = 0.9
 BADGE_FONT_RATIO = (12 / 115) * BADGE_FONT_SCALE  # of poster width — independent of badge height, so it doesn't shrink with the box
 BADGE_TEXT_PADDING_RATIO = 0.18  # of badge height; only matters once text exceeds the min-width floor
 BADGE_FG = (255, 255, 255, 255)
-BADGE_FILL_ALPHA = 242  # ~0.95 opacity, matching MDBScoreBadge's .opacity(0.95)
+BADGE_FILL_ALPHA = 242  # ~0.95 opacity
 AGE_BADGE_BG = (17, 17, 17)
 
-# MDBScoreBadge's shadow: .shadow(color: .black.opacity(0.4), radius: 2, x: 0, y: 1) at 115pt design width.
+# Drop shadow, sized relative to the same 115px design width as the badge geometry above.
 SHADOW_Y_OFFSET_RATIO = 1 / 115
 SHADOW_BLUR_RATIO = 2 / 115
 SHADOW_COLOR = (0, 0, 0, 102)  # ~0.4 opacity
 
-# Same 6-bucket scale mdblist.com and the iOS app use for the score pill,
-# evaluated against the raw 0-100 mdblist score.
+# Same 6-bucket scale mdblist.com uses for the score pill, evaluated
+# against the raw 0-100 mdblist score.
 SCORE_COLOR_STOPS = (
     (90, (0, 112, 0)),      # #007000
     (80, (35, 136, 35)),    # #238823
@@ -104,11 +103,10 @@ def _draw_badge(draw, geometry, text, font, bg_color):
 
 def render_badges(image_bytes, score=None, age_rating=None):
     """
-    Composite an mdblist score badge (top-left, color-coded and sized to
-    match the iOS app's MDBScoreBadge component) and an age rating badge
-    (bottom-right, same proportions for visual consistency) onto a poster
-    image. Returns JPEG bytes. Pass score=None/age_rating=None to skip
-    either badge.
+    Composite an mdblist score badge (top-left, color-coded) and an age
+    rating badge (bottom-right, same proportions for visual consistency)
+    onto a poster image. Returns JPEG bytes. Pass score=None/age_rating=None
+    to skip either badge.
     """
     image = Image.open(io.BytesIO(image_bytes)).convert('RGBA')
     width, height = image.size

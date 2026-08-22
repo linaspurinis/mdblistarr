@@ -13,7 +13,7 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.forms import UserCreationForm
-from django.db import connections, transaction
+from django.db import connections, transaction, IntegrityError
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
@@ -543,7 +543,9 @@ def home_view(request):
                 instance = plex_form.save(commit=False)
 
                 pending_token = request.session.get('plex_pending_token')
-                if pending_token:
+                pending_for = request.session.get('plex_pending_instance_id')
+                pending_matches = pending_for == (instance_id if instance_id else 'new')
+                if pending_token and pending_matches:
                     instance.token = pending_token
                 elif instance_id and instance_id != 'new':
                     instance.token = PlexInstance.objects.get(id=instance_id).token
@@ -557,6 +559,7 @@ def home_view(request):
                     if connection['status']:
                         instance.save()
                         request.session.pop('plex_pending_token', None)
+                        request.session.pop('plex_pending_instance_id', None)
                         request.session['active_plex_id'] = str(instance.id)
                         messages.success(request, "Plex configuration saved successfully!")
                         return HttpResponseRedirect(reverse('home_view'))
@@ -745,6 +748,12 @@ def _fetch_plex_servers(auth_token):
 
 @require_POST
 def plex_auth_start(request):
+    try:
+        instance_id = json.loads(request.body or b'{}').get('instance_id')
+    except json.JSONDecodeError:
+        instance_id = None
+    request.session['plex_pending_instance_id'] = instance_id or 'new'
+
     headers = {
         'X-Plex-Client-Identifier': PLEX_CLIENT_ID,
         'X-Plex-Product': PLEX_PRODUCT,
@@ -867,12 +876,24 @@ def _start_plex_job(kind, job_func):
     right after this one could run its own "is anything running" check
     before the spawned thread has gotten around to creating that row, and
     wrongly conclude nothing is running.
+
+    The check-then-create here is still not atomic on its own — two requests
+    can both pass the check before either creates its row — so the actual
+    single-flight guarantee comes from a DB-level partial unique constraint
+    (uniq_plexsyncrun_running) allowing at most one status='running' row.
+    Losing that race surfaces as an IntegrityError, which we treat the same
+    as having found a running row up front.
     """
     latest = PlexSyncRun.objects.order_by('-started_at').first()
     if latest and latest.status == 'running':
         return JsonResponse(_plex_run_status_payload(latest))
 
-    run = PlexSyncRun.objects.create(status='running', started_at=timezone.now(), kind=kind)
+    try:
+        run = PlexSyncRun.objects.create(status='running', started_at=timezone.now(), kind=kind)
+    except IntegrityError:
+        latest = PlexSyncRun.objects.order_by('-started_at').first()
+        return JsonResponse(_plex_run_status_payload(latest)) if latest else JsonResponse({'status': 'idle'})
+
     threading.Thread(target=_run_plex_job_in_background, args=(job_func, run), daemon=True).start()
     return JsonResponse(_plex_run_status_payload(run))
 

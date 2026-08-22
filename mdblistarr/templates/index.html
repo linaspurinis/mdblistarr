@@ -854,10 +854,11 @@ document.addEventListener('DOMContentLoaded', function() {
         showPlexLoading();
 
         const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+        const instanceId = document.querySelector('#plexSaveForm input[name="instance_id"]').value;
         fetch('/plex/auth/start', {
             method: 'POST',
             headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
-            body: '{}',
+            body: JSON.stringify({instance_id: instanceId}),
         })
         .then(r => r.json())
         .then(data => {
