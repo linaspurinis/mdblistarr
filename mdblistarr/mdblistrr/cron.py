@@ -10,6 +10,7 @@ from .models import Log, InstanceChangeLog, RadarrInstance, SonarrInstance, Pref
 from .services import get_mdblistarr, reset_mdblistarr
 from .arr import SonarrAPI
 from .arr import RadarrAPI
+from .plex_sync import sync_plex_posters
 
 def save_log(provider, status, text):
     log = Log()
@@ -609,3 +610,8 @@ def process_instance_changes():
 @task
 def process_instance_changes_task():
     return process_instance_changes()
+
+@cron_task(cron_schedule="0 */6 * * *")
+@task
+def sync_plex_posters_task():
+    return sync_plex_posters()

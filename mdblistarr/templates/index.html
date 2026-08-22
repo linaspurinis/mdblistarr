@@ -23,6 +23,9 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link {% if active_tab == 'sonarr' %}active{% endif %}" id="sonarr-tab" data-bs-toggle="tab" data-bs-target="#sonarr-pane" type="button" role="tab" aria-controls="sonarr-pane" aria-selected="{% if active_tab == 'sonarr' %}true{% else %}false{% endif %}">Sonarr</button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab == 'plex' %}active{% endif %}" id="plex-tab" data-bs-toggle="tab" data-bs-target="#plex-pane" type="button" role="tab" aria-controls="plex-pane" aria-selected="{% if active_tab == 'plex' %}true{% else %}false{% endif %}">Plex</button>
+        </li>
     </ul>
     <div class="tab-content pt-3" id="configTabsContent">
         <div class="tab-pane fade {% if active_tab == 'mdblist' %}show active{% endif %}" id="mdblist-pane" role="tabpanel" aria-labelledby="mdblist-tab" tabindex="0">
@@ -374,6 +377,141 @@
             </div>
             {% endif %}
         </div>
+        <div class="tab-pane fade {% if active_tab == 'plex' %}show active{% endif %}" id="plex-pane" role="tabpanel" aria-labelledby="plex-tab" tabindex="0">
+            <!-- Plex Configuration -->
+            <h3>
+                Plex
+                <small class="text-muted">Poster Badges (score + age rating)</small>
+            </h3>
+
+            <!-- Plex Server Selection -->
+            <form action="{% url 'home_view' %}" method="post" class="mb-3">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="plex_select">
+                <div class="form-group">
+                    <div class="fieldWrapper mb-3">
+                        {{ plex_selection_form.server_selection.label_tag }}
+                        {{ plex_selection_form.server_selection }}
+                    </div>
+                </div>
+                <div class="d-grid gap-2 d-md-flex mb-4">
+                    <input class="btn btn-primary" type="submit" value="Select Plex Server">
+                </div>
+            </form>
+
+            <!-- Poster Sync (runs across all configured Plex servers, in the background) -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Poster Sync</h5>
+                </div>
+                <div class="card-body">
+                    {% if not plex_instances %}
+                        <p class="text-muted mb-0">Add a Plex server below to enable poster syncing.</p>
+                    {% else %}
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <button type="button" class="btn btn-info" id="plexSyncStartBtn">Sync Now</button>
+                            <button type="button" class="btn btn-outline-danger" id="plexSyncCancelBtn" style="display:none;">Cancel</button>
+                        </div>
+                        <div class="progress mb-2" style="height: 1.25rem; display:none;" id="plexSyncProgressWrapper">
+                            <div class="progress-bar" id="plexSyncProgressBar" role="progressbar" style="width: 0%;">0%</div>
+                        </div>
+                        <div id="plexSyncStatusText" class="small text-muted"></div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Plex Instance Form -->
+            {% if plex_form %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Plex Server Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form action="{% url 'home_view' %}" method="post" id="plexSaveForm">
+                        {% csrf_token %}
+                        <input type="hidden" name="form_type" value="plex_save">
+                        <input type="hidden" name="instance_id" value="{{ active_plex_id|default:'new' }}">
+
+                        {% if plex_form.non_field_errors %}
+                            <div class="alert alert-warning" role="alert">
+                                {{ plex_form.non_field_errors }}
+                            </div>
+                        {% endif %}
+
+                        <!-- Connect with Plex -->
+                        <div class="mb-3">
+                            <button type="button" class="btn btn-primary" id="connectPlexBtn">
+                                {% if active_plex_id and active_plex_id != 'new' %}Reconnect with Plex{% else %}Connect with Plex{% endif %}
+                            </button>
+                            <span id="plexConnectedHint" class="text-muted small ms-2" style="display:none;">Connected — pick a server below, then Save.</span>
+                        </div>
+
+                        <div class="fieldWrapper mb-3" id="plexServerPickerWrapper" style="display:none;">
+                            <label class="form-label" for="plexServerPicker">Discovered Servers</label>
+                            <select class="form-select" id="plexServerPicker"></select>
+                        </div>
+
+                        <!-- Name field -->
+                        <div class="fieldWrapper mb-3">
+                            {{ plex_form.name.label_tag }}
+                            {{ plex_form.name }}
+                            <div class="invalid-feedback">
+                                {{ plex_form.name.errors.0 }}
+                            </div>
+                        </div>
+
+                        <!-- URL field (set via Connect with Plex, not typed manually) -->
+                        <div class="fieldWrapper mb-3">
+                            {{ plex_form.url.label_tag }}
+                            {{ plex_form.url }}
+                            <div class="invalid-feedback">
+                                {{ plex_form.url.errors.0 }}
+                            </div>
+                        </div>
+
+                        <!-- Library selection -->
+                        <div class="fieldWrapper mb-3">
+                            {{ plex_form.library_ids.label_tag }}
+                            <div id="plex_libraries_container">
+                                {% for value, text in plex_form.fields.library_ids.choices %}
+                                    <div class="form-check form-check-inline">
+                                        <input type="checkbox" name="library_ids" value="{{ value }}" class="form-check-input" id="plex_lib_{{ value }}"{% if value in plex_form.initial.library_ids %} checked{% endif %}>
+                                        <label class="form-check-label" for="plex_lib_{{ value }}">{{ text }}</label>
+                                    </div>
+                                {% empty %}
+                                    <div class="text-muted small">No libraries found yet. Connect with Plex, then use Test Connection to load libraries.</div>
+                                {% endfor %}
+                            </div>
+                            <div class="invalid-feedback">
+                                {{ plex_form.library_ids.errors.0 }}
+                            </div>
+                            <small class="form-text text-muted">{{ plex_form.library_ids.help_text }}</small>
+                        </div>
+
+                        <!-- Badge toggles -->
+                        <div class="fieldWrapper mb-3 form-check">
+                            {{ plex_form.badge_score_enabled }}
+                            {{ plex_form.badge_score_enabled.label_tag }}
+                        </div>
+                        <div class="fieldWrapper mb-3 form-check">
+                            {{ plex_form.badge_age_rating_enabled }}
+                            {{ plex_form.badge_age_rating_enabled.label_tag }}
+                        </div>
+
+                        <div id="plexTestResult" class="small mb-2"></div>
+
+                        <div class="d-grid gap-2 d-md-flex">
+                            <button type="submit" class="btn btn-success">Save</button>
+                            <button type="button" class="btn btn-primary" id="testPlexBtn">Test Connection</button>
+                            {% if active_plex_id and active_plex_id != 'new' %}
+                            <button type="submit" formaction="{% url 'home_view' %}" name="form_type" value="plex_delete" class="btn btn-danger">Delete</button>
+                            {% endif %}
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
     </div>
 </div>
 
@@ -411,6 +549,45 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="cancelDeviceBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Plex PIN Authorization Modal -->
+<div class="modal fade" id="plexPinModal" tabindex="-1" aria-labelledby="plexPinModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="plexPinModalLabel">Connect with Plex</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="plexPinModalClose"></button>
+            </div>
+            <div class="modal-body">
+                <div id="plexPinLoading" class="text-center py-3">
+                    <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+                    <p class="mt-2 text-muted">Starting authorization...</p>
+                </div>
+                <div id="plexPinContent" style="display:none;">
+                    <p class="text-center text-muted mb-3">Click to authorize:</p>
+                    <div class="text-center mb-4">
+                        <a id="plexAuthUri" href="#" target="_blank" rel="noopener"
+                           class="text-decoration-none fw-semibold font-monospace small">
+                            <span id="plexAuthUriText"></span> ↗
+                        </a>
+                    </div>
+                    <div class="text-center mb-1">
+                        <p class="text-muted small mb-1">PIN code:</p>
+                        <span id="plexPinCode" class="h5 font-monospace fw-bold" style="letter-spacing:.15em"></span>
+                    </div>
+                    <div id="plexPinStatus" class="text-center mt-4">
+                        <div class="spinner-border spinner-border-sm me-1" role="status"></div>
+                        <span class="text-muted small">Waiting for authorization on plex.tv…</span>
+                    </div>
+                </div>
+                <div id="plexPinError" class="alert alert-danger" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="cancelPlexPinBtn">Cancel</button>
             </div>
         </div>
     </div>
@@ -656,6 +833,303 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
+
+    // Plex PIN auth flow
+    let plexPollTimer = null;
+    const plexPollIntervalMs = 2000;
+
+    document.getElementById('connectPlexBtn')?.addEventListener('click', startPlexAuth);
+    document.getElementById('cancelPlexPinBtn')?.addEventListener('click', stopPlexPolling);
+    document.getElementById('plexPinModalClose')?.addEventListener('click', stopPlexPolling);
+
+    function startPlexAuth() {
+        const modal = new bootstrap.Modal(document.getElementById('plexPinModal'));
+        modal.show();
+        showPlexLoading();
+
+        const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+        fetch('/plex/auth/start', {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
+            body: '{}',
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { showPlexError(data.error); return; }
+            showPlexPin(data);
+            schedulePlexPoll();
+        })
+        .catch(() => showPlexError('Failed to start authorization. Check your connection.'));
+    }
+
+    function schedulePlexPoll() {
+        plexPollTimer = setTimeout(pollPlexAuth, plexPollIntervalMs);
+    }
+
+    function stopPlexPolling() {
+        if (plexPollTimer) { clearTimeout(plexPollTimer); plexPollTimer = null; }
+    }
+
+    function pollPlexAuth() {
+        const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+        fetch('/plex/auth/poll', {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
+            body: '{}',
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'complete') {
+                stopPlexPolling();
+                bootstrap.Modal.getInstance(document.getElementById('plexPinModal'))?.hide();
+                onPlexConnected(data.servers || []);
+            } else if (data.status === 'error') {
+                showPlexStatus('Error: ' + (data.message || 'Unknown error'));
+            } else {
+                schedulePlexPoll(); // 'pending' — keep polling
+            }
+        })
+        .catch(() => schedulePlexPoll()); // network hiccup — retry
+    }
+
+    function showPlexLoading() {
+        document.getElementById('plexPinLoading').style.display = 'block';
+        document.getElementById('plexPinContent').style.display = 'none';
+        document.getElementById('plexPinError').style.display = 'none';
+    }
+
+    function showPlexPin(data) {
+        document.getElementById('plexPinLoading').style.display = 'none';
+        document.getElementById('plexPinCode').textContent = data.pin_code;
+        const link = document.getElementById('plexAuthUri');
+        link.href = data.auth_url;
+        document.getElementById('plexAuthUriText').textContent = data.auth_url;
+        document.getElementById('plexPinContent').style.display = 'block';
+    }
+
+    function showPlexStatus(msg) {
+        const el = document.getElementById('plexPinStatus');
+        el.textContent = msg;
+        el.className = 'text-center mt-4 text-danger small';
+    }
+
+    function showPlexError(msg) {
+        document.getElementById('plexPinLoading').style.display = 'none';
+        const el = document.getElementById('plexPinError');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+
+    function onPlexConnected(servers) {
+        const form = document.getElementById('plexSaveForm');
+        document.getElementById('plexConnectedHint').style.display = 'inline';
+
+        const pickerWrapper = document.getElementById('plexServerPickerWrapper');
+        const picker = document.getElementById('plexServerPicker');
+        picker.innerHTML = '';
+
+        if (!servers.length) {
+            const opt = document.createElement('option');
+            opt.textContent = 'No Plex Media Servers found on this account';
+            picker.appendChild(opt);
+            pickerWrapper.style.display = 'block';
+            return;
+        }
+
+        servers.forEach((server, i) => {
+            const opt = document.createElement('option');
+            opt.value = server.uri;
+            opt.dataset.name = server.name;
+            opt.textContent = server.label;
+            picker.appendChild(opt);
+        });
+        pickerWrapper.style.display = 'block';
+
+        function applySelection() {
+            const selected = picker.options[picker.selectedIndex];
+            if (!selected) return;
+            const urlField = form.querySelector('input[name="url"]');
+            const nameField = form.querySelector('input[name="name"]');
+            urlField.value = selected.value;
+            if (!nameField.value) {
+                nameField.value = selected.dataset.name || '';
+            }
+        }
+
+        picker.addEventListener('change', applySelection);
+        applySelection();
+    }
+
+    // Plex Test Connection (separate from the generic radarr/sonarr handler above —
+    // Plex has no apikey/quality_profile/root_folder fields to update)
+    document.getElementById('testPlexBtn')?.addEventListener('click', function() {
+        const form = document.getElementById('plexSaveForm');
+        const resultEl = document.getElementById('plexTestResult');
+        const url = form.querySelector('input[name="url"]').value;
+        const instanceId = form.querySelector('input[name="instance_id"]').value;
+        const csrfToken = form.querySelector('input[name="csrfmiddlewaretoken"]').value;
+
+        resultEl.textContent = 'Testing…';
+        resultEl.className = 'small mb-2 text-muted';
+
+        fetch('/test_plex_connection/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({url: url, instance_id: instanceId}),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                resultEl.textContent = 'Connected: Plex ' + data.version;
+                resultEl.className = 'small mb-2 text-success';
+
+                const container = document.getElementById('plex_libraries_container');
+                const currentValues = Array.from(container.querySelectorAll('input[name="library_ids"]:checked')).map(cb => cb.value);
+                container.innerHTML = '';
+                if (data.libraries && data.libraries.length) {
+                    data.libraries.forEach(lib => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'form-check form-check-inline';
+
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.name = 'library_ids';
+                        checkbox.value = lib[0];
+                        checkbox.className = 'form-check-input';
+                        checkbox.id = 'plex_lib_' + lib[0];
+                        checkbox.checked = currentValues.includes(lib[0]);
+
+                        const label = document.createElement('label');
+                        label.className = 'form-check-label';
+                        label.setAttribute('for', checkbox.id);
+                        label.textContent = lib[1];
+
+                        wrapper.appendChild(checkbox);
+                        wrapper.appendChild(label);
+                        container.appendChild(wrapper);
+                    });
+                } else {
+                    const empty = document.createElement('div');
+                    empty.className = 'text-muted small';
+                    empty.textContent = 'No libraries found.';
+                    container.appendChild(empty);
+                }
+            } else {
+                resultEl.textContent = data.message || 'Unable to connect to Plex';
+                resultEl.className = 'small mb-2 text-danger';
+            }
+        })
+        .catch(() => {
+            resultEl.textContent = 'An error occurred while testing the connection';
+            resultEl.className = 'small mb-2 text-danger';
+        });
+    });
+
+    // Plex poster sync — runs in a background thread server-side; this just polls for progress.
+    const plexSyncStartBtn = document.getElementById('plexSyncStartBtn');
+    const plexSyncCancelBtn = document.getElementById('plexSyncCancelBtn');
+    const plexSyncProgressWrapper = document.getElementById('plexSyncProgressWrapper');
+    const plexSyncProgressBar = document.getElementById('plexSyncProgressBar');
+    const plexSyncStatusText = document.getElementById('plexSyncStatusText');
+    let plexSyncPollTimer = null;
+
+    function csrfToken() {
+        return document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+    }
+
+    function timeAgo(isoString) {
+        if (!isoString) return '';
+        const seconds = Math.max(0, Math.round((Date.now() - new Date(isoString).getTime()) / 1000));
+        if (seconds < 60) return seconds + 's ago';
+        if (seconds < 3600) return Math.round(seconds / 60) + 'm ago';
+        return Math.round(seconds / 3600) + 'h ago';
+    }
+
+    function renderPlexSyncStatus(data) {
+        if (!plexSyncStartBtn) return; // no Plex servers configured yet
+
+        if (data.status === 'running') {
+            plexSyncStartBtn.style.display = 'none';
+            plexSyncCancelBtn.style.display = 'inline-block';
+            plexSyncCancelBtn.disabled = false;
+            plexSyncCancelBtn.textContent = 'Cancel';
+            plexSyncProgressWrapper.style.display = 'block';
+
+            const pct = data.total_items > 0 ? Math.min(100, Math.round(100 * data.processed_items / data.total_items)) : 0;
+            plexSyncProgressBar.style.width = pct + '%';
+            plexSyncProgressBar.textContent = data.total_items > 0 ? (pct + '%') : '…';
+            plexSyncProgressBar.classList.toggle('progress-bar-striped', data.total_items === 0);
+            plexSyncProgressBar.classList.toggle('progress-bar-animated', data.total_items === 0);
+
+            const parts = [`${data.processed_items} / ${data.total_items || '?'} items`];
+            parts.push(`stamped ${data.stamped}`, `skipped ${data.skipped}`, `errors ${data.errors}`);
+            if (data.current_title) parts.push(`— ${data.current_title}`);
+            plexSyncStatusText.textContent = parts.join(' · ');
+
+            schedulePlexSyncPoll();
+        } else {
+            plexSyncStartBtn.style.display = 'inline-block';
+            plexSyncCancelBtn.style.display = 'none';
+            plexSyncProgressWrapper.style.display = 'none';
+            stopPlexSyncPolling();
+
+            if (data.status === 'idle') {
+                plexSyncStatusText.textContent = '';
+            } else if (data.status === 'complete') {
+                plexSyncStatusText.textContent =
+                    `Last sync ${timeAgo(data.finished_at)}: stamped ${data.stamped}, skipped ${data.skipped}, errors ${data.errors}`;
+            } else if (data.status === 'cancelled') {
+                plexSyncStatusText.textContent =
+                    `Cancelled ${timeAgo(data.finished_at)} — stamped ${data.stamped}, skipped ${data.skipped} before stopping`;
+            } else if (data.status === 'error') {
+                plexSyncStatusText.textContent = 'Last sync failed: ' + (data.error_message || 'unknown error');
+            }
+        }
+    }
+
+    function pollPlexSyncStatus() {
+        fetch('/plex/sync/status', {headers: {'X-Requested-With': 'fetch'}})
+            .then(r => r.json())
+            .then(renderPlexSyncStatus)
+            .catch(() => schedulePlexSyncPoll());
+    }
+
+    function schedulePlexSyncPoll() {
+        stopPlexSyncPolling();
+        plexSyncPollTimer = setTimeout(pollPlexSyncStatus, 1500);
+    }
+
+    function stopPlexSyncPolling() {
+        if (plexSyncPollTimer) { clearTimeout(plexSyncPollTimer); plexSyncPollTimer = null; }
+    }
+
+    plexSyncStartBtn?.addEventListener('click', function() {
+        plexSyncStartBtn.disabled = true;
+        fetch('/plex/sync/start', {method: 'POST', headers: {'X-CSRFToken': csrfToken()}})
+            .then(r => r.json())
+            .then(data => {
+                plexSyncStartBtn.disabled = false;
+                if (data.status === 'error') {
+                    plexSyncStatusText.textContent = data.message || 'Failed to start sync';
+                    return;
+                }
+                renderPlexSyncStatus(data);
+            })
+            .catch(() => { plexSyncStartBtn.disabled = false; });
+    });
+
+    plexSyncCancelBtn?.addEventListener('click', function() {
+        plexSyncCancelBtn.disabled = true;
+        plexSyncCancelBtn.textContent = 'Cancelling…';
+        fetch('/plex/sync/cancel', {method: 'POST', headers: {'X-CSRFToken': csrfToken()}})
+            .catch(() => {});
+    });
+
+    // Reflect current state immediately on page load (e.g. a cron-triggered
+    // sync already running, or the summary of the last completed run).
+    if (plexSyncStartBtn) {
+        pollPlexSyncStatus();
+    }
 });
 </script>
 {% endblock %}

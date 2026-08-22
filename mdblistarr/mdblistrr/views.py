@@ -1,17 +1,19 @@
 import logging
 import random
+import threading
 import time
 import traceback
 import json
 import fcntl
 import os
 import requests as _requests
+import xml.etree.ElementTree as ET
 
 from django import forms
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.forms import UserCreationForm
-from django.db import transaction
+from django.db import connections, transaction
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
@@ -21,8 +23,10 @@ from django.views.decorators.http import require_POST, require_http_methods
 
 from .arr import MdblistAPI, RadarrAPI, SonarrAPI, MDBLIST_DEFAULT_CLIENT_ID
 from .connect import Connect, sanitize_text
-from .models import Preferences, RadarrInstance, SonarrInstance
+from .models import Preferences, RadarrInstance, SonarrInstance, PlexInstance, PlexSyncRun
 from .services import get_mdblistarr, reset_mdblistarr
+from .plex_api import PLEX_CLIENT_ID, PLEX_PRODUCT, PLEX_VERSION, PLEX_DEVICE
+from .plex_sync import sync_plex_posters
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +34,9 @@ MDBLIST_TOKEN_URL = "https://api.mdblist.com/oauth/token/"
 MDBLIST_DEVICE_AUTH_URL = "https://api.mdblist.com/oauth/device-authorization/"
 MDBLIST_DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 MDBLIST_REVOKE_URL = "https://api.mdblist.com/oauth/revoke_token/"
+
+PLEX_PIN_URL = "https://plex.tv/api/v2/pins"
+PLEX_RESOURCES_URL = "https://plex.tv/api/v2/resources"
 
 
 SYNC_HOUR_CHOICES = [(str(h), f"{h:02d}:00 UTC") for h in range(24)]
@@ -221,6 +228,37 @@ class SonarrInstanceForm(forms.ModelForm):
             except Exception as e:
                 logger.error(f"Error initializing SonarrInstanceForm: {sanitize_text(e)}")
 
+class PlexInstanceForm(forms.ModelForm):
+    library_ids = MultiValueTagsField(
+        label='Libraries',
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        help_text='Libraries to stamp posters in. Use Test Connection to refresh this list after adding/removing libraries in Plex.',
+    )
+
+    class Meta:
+        model = PlexInstance
+        fields = ['name', 'url', 'library_ids', 'badge_score_enabled', 'badge_age_rating_enabled']
+        widgets = {
+            'name': forms.TextInput(attrs={'placeholder': 'Instance Name', 'class': 'form-control'}),
+            'url': forms.TextInput(attrs={'placeholder': 'Connect with Plex to fill this in', 'class': 'form-control', 'readonly': 'readonly'}),
+            'badge_score_enabled': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'badge_age_rating_enabled': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super(PlexInstanceForm, self).__init__(*args, **kwargs)
+
+        self.fields['library_ids'].choices = []
+        self.initial['library_ids'] = [lid for lid in (self.instance.library_ids or '').split(',') if lid] if self.instance and self.instance.pk else []
+
+        if self.instance and self.instance.pk and self.instance.url and self.instance.token:
+            try:
+                mdblistarr = get_mdblistarr()
+                self.fields['library_ids'].choices = mdblistarr.get_plex_library_choices(self.instance.url, self.instance.token)
+            except Exception as e:
+                logger.error(f"Error initializing PlexInstanceForm: {sanitize_text(e)}")
+
 SETUP_LOCK_PATH = os.environ.get('MDBLISTARR_SETUP_LOCK_PATH', '/usr/src/db/.initial-setup.lock')
 
 def _setup_complete_redirect(request):
@@ -303,15 +341,22 @@ def home_view(request):
     
     sonarr_choices = [('new', '--- Add New Sonarr Server ---')]
     sonarr_choices.extend([(str(instance.id), instance.name) for instance in sonarr_instances])
-    
+
+    plex_instances = PlexInstance.objects.all()
+    plex_choices = [('new', '--- Add New Plex Server ---')]
+    plex_choices.extend([(str(instance.id), instance.name) for instance in plex_instances])
+
     radarr_selection_form = ServerSelectionForm(choices=radarr_choices, prefix='radarr_select')
     sonarr_selection_form = ServerSelectionForm(choices=sonarr_choices, prefix='sonarr_select')
-    
+    plex_selection_form = ServerSelectionForm(choices=plex_choices, prefix='plex_select')
+
     radarr_form = RadarrInstanceForm()
     sonarr_form = SonarrInstanceForm()
-    
+    plex_form = PlexInstanceForm()
+
     active_radarr_id = request.session.get('active_radarr_id')
     active_sonarr_id = request.session.get('active_sonarr_id')
+    active_plex_id = request.session.get('active_plex_id')
 
     # Restore form for the previously active instance on fresh GET
     if request.method == "GET":
@@ -329,6 +374,13 @@ def home_view(request):
             except SonarrInstance.DoesNotExist:
                 active_sonarr_id = None
                 request.session.pop('active_sonarr_id', None)
+        if active_plex_id and active_plex_id != 'new':
+            try:
+                instance = PlexInstance.objects.get(id=active_plex_id)
+                plex_form = PlexInstanceForm(instance=instance)
+            except PlexInstance.DoesNotExist:
+                active_plex_id = None
+                request.session.pop('active_plex_id', None)
 
     if request.method == "POST":
         form_type = request.POST.get('form_type', '')
@@ -338,7 +390,9 @@ def home_view(request):
             request.session['active_tab'] = 'radarr'
         elif form_type.startswith('sonarr'):
             request.session['active_tab'] = 'sonarr'
-        
+        elif form_type.startswith('plex'):
+            request.session['active_tab'] = 'plex'
+
         if form_type == 'mdblist':
             mdblist_form = MDBListForm(request.POST, oauth_connected=oauth_connected)
             if mdblist_form.is_valid():
@@ -458,21 +512,82 @@ def home_view(request):
                 request.session.pop('active_sonarr_id', None)
                 active_sonarr_id = None
                 return HttpResponseRedirect(reverse('home_view'))
-        
+
+        elif form_type == 'plex_select':
+            plex_selection_form = ServerSelectionForm(request.POST, choices=plex_choices, prefix='plex_select')
+            if plex_selection_form.is_valid():
+                server_id = plex_selection_form.cleaned_data['server_selection']
+                if server_id != 'new':
+                    active_plex_id = server_id
+                    request.session['active_plex_id'] = server_id
+                    instance = PlexInstance.objects.get(id=server_id)
+                    plex_form = PlexInstanceForm(instance=instance)
+                else:
+                    active_plex_id = 'new'
+                    request.session['active_plex_id'] = 'new'
+                    plex_form = PlexInstanceForm()
+
+        elif form_type == 'plex_save':
+            instance_id = request.POST.get('instance_id')
+
+            if instance_id and instance_id != 'new':
+                instance = get_object_or_404(PlexInstance, id=instance_id)
+                plex_form = PlexInstanceForm(request.POST, instance=instance)
+                active_plex_id = instance_id
+            else:
+                plex_form = PlexInstanceForm(request.POST)
+
+            if plex_form.is_valid():
+                instance = plex_form.save(commit=False)
+
+                pending_token = request.session.get('plex_pending_token')
+                if pending_token:
+                    instance.token = pending_token
+                elif instance_id and instance_id != 'new':
+                    instance.token = PlexInstance.objects.get(id=instance_id).token
+                else:
+                    plex_form.add_error(None, 'Connect with Plex before saving.')
+
+                if not plex_form.errors:
+                    mdblistarr = get_mdblistarr()
+                    connection = mdblistarr.test_plex_connection(instance.url, instance.token)
+
+                    if connection['status']:
+                        instance.save()
+                        request.session.pop('plex_pending_token', None)
+                        request.session['active_plex_id'] = str(instance.id)
+                        messages.success(request, "Plex configuration saved successfully!")
+                        return HttpResponseRedirect(reverse('home_view'))
+                    else:
+                        plex_form.add_error('url', 'Unable to connect to Plex')
+
+        elif form_type == 'plex_delete':
+            instance_id = request.POST.get('instance_id')
+            if instance_id:
+                PlexInstance.objects.filter(id=instance_id).delete()
+                request.session.pop('active_plex_id', None)
+                active_plex_id = None
+                return HttpResponseRedirect(reverse('home_view'))
 
     if active_radarr_id:
         radarr_selection_form.initial = {'server_selection': active_radarr_id}
     if active_sonarr_id:
         sonarr_selection_form.initial = {'server_selection': active_sonarr_id}
-    
+    if active_plex_id:
+        plex_selection_form.initial = {'server_selection': active_plex_id}
+
     context = {
         'mdblist_form': mdblist_form,
         'radarr_selection_form': radarr_selection_form,
         'sonarr_selection_form': sonarr_selection_form,
+        'plex_selection_form': plex_selection_form,
         'radarr_form': radarr_form,
         'sonarr_form': sonarr_form,
+        'plex_form': plex_form,
         'active_radarr_id': active_radarr_id,
         'active_sonarr_id': active_sonarr_id,
+        'active_plex_id': active_plex_id,
+        'plex_instances': plex_instances,
         'active_tab': request.session.get('active_tab', 'mdblist'),
         'oauth_connected': oauth_connected,
         'oauth_username': oauth_username,
@@ -586,6 +701,187 @@ def oauth_disconnect(request):
     messages.success(request, "Disconnected from MDBList OAuth.")
     return redirect('home_view')
 
+def _fetch_plex_servers(auth_token):
+    """
+    List discovered Plex Media Server connections for this account, local and
+    remote alike (mdblistarr typically runs on the same network as Plex,
+    unlike mdblist.com's own hosted Plex integration).
+    """
+    headers = {
+        'X-Plex-Token': auth_token,
+        'X-Plex-Client-Identifier': PLEX_CLIENT_ID,
+    }
+    try:
+        r = _requests.get(PLEX_RESOURCES_URL, headers=headers, params={'includeHttps': 1, 'includeRelay': 1}, timeout=10)
+        root = ET.fromstring(r.text)
+    except Exception:
+        return []
+
+    options = []
+    for resource in root.findall('resource'):
+        if resource.attrib.get('product') != 'Plex Media Server':
+            continue
+        name = resource.attrib.get('name') or 'Plex Server'
+        conn_group = resource.find('connections')
+        if conn_group is None:
+            continue
+        conns = list(conn_group.findall('connection'))
+        conns.sort(key=lambda c: c.attrib.get('local') != '1')  # local connections first
+        for conn in conns:
+            uri = conn.attrib.get('uri')
+            if not uri:
+                continue
+            local = conn.attrib.get('local') == '1'
+            options.append({
+                'uri': uri,
+                'name': name,
+                'label': f"{name} — {uri}{' (local)' if local else ''}",
+            })
+    return options
+
+
+@require_POST
+def plex_auth_start(request):
+    headers = {
+        'X-Plex-Client-Identifier': PLEX_CLIENT_ID,
+        'X-Plex-Product': PLEX_PRODUCT,
+        'X-Plex-Version': PLEX_VERSION,
+        'X-Plex-Device': PLEX_DEVICE,
+    }
+    try:
+        r = _requests.post(PLEX_PIN_URL, headers=headers, params={'strong': 'false'}, timeout=10)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+    if r.status_code != 201:
+        return JsonResponse({'error': 'Failed to start Plex authorization'}, status=400)
+
+    try:
+        root = ET.fromstring(r.text)
+    except ET.ParseError:
+        return JsonResponse({'error': 'Unexpected response from Plex'}, status=502)
+
+    pin_id = root.attrib.get('id')
+    pin_code = root.attrib.get('code')
+    if not pin_id or not pin_code:
+        return JsonResponse({'error': 'Failed to start Plex authorization'}, status=400)
+
+    request.session['plex_pin_id'] = pin_id
+
+    return JsonResponse({
+        'pin_code': pin_code,
+        'auth_url': f'https://plex.tv/link?pin={pin_code}',
+    })
+
+
+@require_POST
+def plex_auth_poll(request):
+    pin_id = request.session.get('plex_pin_id')
+    if not pin_id:
+        return JsonResponse({'status': 'error', 'message': 'Session expired, please start over.'})
+
+    headers = {
+        'X-Plex-Client-Identifier': PLEX_CLIENT_ID,
+        'X-Plex-Product': PLEX_PRODUCT,
+        'X-Plex-Version': PLEX_VERSION,
+        'X-Plex-Device': PLEX_DEVICE,
+    }
+    try:
+        r = _requests.get(f'{PLEX_PIN_URL}/{pin_id}', headers=headers, timeout=10)
+        root = ET.fromstring(r.text)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})
+
+    auth_token = root.attrib.get('authToken')
+    if not auth_token:
+        return JsonResponse({'status': 'pending'})
+
+    request.session.pop('plex_pin_id', None)
+    request.session['plex_pending_token'] = auth_token
+
+    servers = _fetch_plex_servers(auth_token)
+    return JsonResponse({'status': 'complete', 'servers': servers})
+
+
+@csrf_exempt
+def test_plex_connection(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        instance_id = data.get('instance_id')
+        url = data.get('url')
+
+        if instance_id and instance_id != 'new':
+            instance = get_object_or_404(PlexInstance, id=instance_id)
+            url = url or instance.url
+            token = instance.token
+        else:
+            token = request.session.get('plex_pending_token')
+
+        if not url or not token:
+            return JsonResponse({'status': 'error', 'message': 'Connect with Plex first'})
+
+        mdblistarr = get_mdblistarr()
+        result = mdblistarr.test_plex_connection(url, token)
+
+        if result['status']:
+            libraries = mdblistarr.get_plex_library_choices(url, token)
+            return JsonResponse({'status': 'success', 'version': result['version'], 'libraries': libraries})
+        else:
+            return JsonResponse({'status': 'error', 'message': 'Unable to connect to Plex'})
+
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+
+
+def _plex_run_status_payload(run):
+    return {
+        'status': run.status,
+        'total_items': run.total_items,
+        'processed_items': run.processed_items,
+        'stamped': run.stamped,
+        'skipped': run.skipped,
+        'errors': run.errors,
+        'current_title': run.current_title,
+        'started_at': run.started_at.isoformat() if run.started_at else None,
+        'finished_at': run.finished_at.isoformat() if run.finished_at else None,
+        'error_message': run.error_message,
+    }
+
+
+def _run_plex_sync_in_background():
+    try:
+        sync_plex_posters()
+    finally:
+        # This thread outlives the request that started it; make sure it
+        # doesn't hold a DB connection open past the sync finishing.
+        connections.close_all()
+
+
+@require_POST
+def plex_sync_start(request):
+    latest = PlexSyncRun.objects.order_by('-started_at').first()
+    if latest and latest.status == 'running':
+        return JsonResponse(_plex_run_status_payload(latest))
+
+    if not PlexInstance.objects.exists():
+        return JsonResponse({'status': 'error', 'message': 'No Plex servers configured'}, status=400)
+
+    threading.Thread(target=_run_plex_sync_in_background, daemon=True).start()
+    return JsonResponse({'status': 'running'})
+
+
+def plex_sync_status(request):
+    run = PlexSyncRun.objects.order_by('-started_at').first()
+    if not run:
+        return JsonResponse({'status': 'idle'})
+    return JsonResponse(_plex_run_status_payload(run))
+
+
+@require_POST
+def plex_sync_cancel(request):
+    updated = PlexSyncRun.objects.filter(status='running').update(cancel_requested=True)
+    return JsonResponse({'status': 'cancelling' if updated else 'idle'})
+
+
 @csrf_exempt
 def test_radarr_connection(request):
     if request.method == 'POST':
@@ -658,7 +954,7 @@ def set_active_tab(request):
     try:
         data = json.loads(request.body)
         tab = data.get("tab")
-        if tab in {"mdblist", "radarr", "sonarr"}:
+        if tab in {"mdblist", "radarr", "sonarr", "plex"}:
             request.session["active_tab"] = tab
             return JsonResponse({"status": "ok"})
     except json.JSONDecodeError:

@@ -6,6 +6,7 @@ from .models import RadarrInstance, SonarrInstance
 
 MDBLIST_TOKEN_URL = "https://api.mdblist.com/oauth/token/"
 MDBLIST_DEFAULT_CLIENT_ID = "EUk8hb6sCGab70Z08k9EKMv1kahOh311Xxk4fDrj"
+MDBLIST_API_URL = "https://api.mdblist.com"
 
 class SonarrAPI():
     def __init__(self, url=None, apikey=None, instance_id=None):
@@ -345,3 +346,21 @@ class MdblistAPI():
             return self.connect.post_json("https://api.mdblist.com/arr/config", json=payload, **self._auth())
         except:
             return {'response': 'Exception', 'error': f'{traceback.format_exc()}'}
+
+    def get_media_info_batch(self, media_provider, media_type, ids):
+        """
+        Resolve up to 200 items at once (score + age rating, used for Plex
+        poster badges) via api.mdblist.com/{media_provider}/{media_type}.
+        media_provider is one of imdb/trakt/tmdb/tvdb/mal/mdblist; media_type
+        is 'movie' or 'show'. Uses the same OAuth-or-apikey auth as the rest
+        of this class.
+        """
+        try:
+            self._ensure_valid_token()
+            return self.connect.post_json(
+                f"{MDBLIST_API_URL}/{media_provider}/{media_type}",
+                json={'ids': ids},
+                **self._auth(),
+            )
+        except Exception:
+            return {'error': f'{traceback.format_exc()}'}

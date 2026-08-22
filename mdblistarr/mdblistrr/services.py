@@ -3,6 +3,7 @@ from functools import lru_cache
 
 from .models import Preferences, RadarrInstance, SonarrInstance
 from .arr import SonarrAPI, RadarrAPI, MdblistAPI
+from .plex_api import PlexServerAPI
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +268,25 @@ class MDBListarr:
         except Exception as e:
             logger.error(f"Error getting Radarr root folder: {str(e)}")
             return ""
+
+    def test_plex_connection(self, url, token):
+        try:
+            plex = PlexServerAPI(url=url, token=token)
+            return plex.test_connection()
+        except Exception as e:
+            logger.error(f"Error connecting to Plex: {str(e)}")
+            return {'status': False, 'version': ''}
+
+    def get_plex_library_choices(self, url, token):
+        choices_list = []
+        try:
+            plex = PlexServerAPI(url=url, token=token)
+            for section in plex.get_sections():
+                label = f"{section['title']} ({section['type']})"
+                choices_list.append((section['id'], label))
+        except Exception as e:
+            logger.error(f"Error fetching Plex libraries: {str(e)}")
+        return choices_list
 
     def get_sonarr_monitor(self, instance_id=None):
         """

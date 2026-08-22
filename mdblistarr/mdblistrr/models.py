@@ -115,6 +115,93 @@ class SonarrInstance(models.Model):
     def __str__(self):
         return self.name
 
+class PlexSyncRun(models.Model):
+    """
+    Tracks a single sync_plex_posters() execution (manual or cron-triggered)
+    so the UI can show live progress via polling and request cancellation,
+    instead of blocking the request that started it.
+    """
+    STATUS_CHOICES = [
+        ('running', 'Running'),
+        ('complete', 'Complete'),
+        ('cancelled', 'Cancelled'),
+        ('error', 'Error'),
+    ]
+
+    id = models.AutoField(primary_key=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='running')
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField(blank=True, null=True)
+    total_items = models.IntegerField(default=0)
+    processed_items = models.IntegerField(default=0)
+    stamped = models.IntegerField(default=0)
+    skipped = models.IntegerField(default=0)
+    errors = models.IntegerField(default=0)
+    current_title = models.CharField(max_length=255, blank=True, default='')
+    cancel_requested = models.BooleanField(default=False)
+    error_message = models.TextField(blank=True, default='')
+
+    def __str__(self):
+        return f"PlexSyncRun#{self.id} {self.status}"
+
+class PlexInstance(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=255)
+    url = models.CharField(max_length=255)
+    token = EncryptedCharField(max_length=2048)
+    server_client_identifier = models.CharField(max_length=255, blank=True, default='')
+    library_ids = models.CharField(max_length=500, blank=True, default='')
+    badge_score_enabled = models.BooleanField(default=True)
+    badge_age_rating_enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+class PlexPosterState(models.Model):
+    """
+    Tracks what mdblistarr last stamped onto a Plex item's poster, so a sync
+    run only re-composites/re-uploads when the underlying score/age rating or
+    the poster art itself has actually changed (see last_thumb_key /
+    last_uploaded_thumb_key below).
+    """
+    id = models.BigAutoField(primary_key=True)
+    plex_instance = models.ForeignKey(PlexInstance, on_delete=models.CASCADE, related_name='poster_states')
+    rating_key = models.CharField(max_length=50)
+    section_id = models.CharField(max_length=50, blank=True, default='')
+    section_type = models.CharField(max_length=10, blank=True, default='')
+    imdb_id = models.CharField(max_length=20, blank=True, null=True)
+    tmdb_id = models.PositiveIntegerField(blank=True, null=True)
+    tvdb_id = models.PositiveIntegerField(blank=True, null=True)
+    title = models.CharField(max_length=255, blank=True, null=True)
+
+    stamped_score = models.IntegerField(blank=True, null=True)
+    stamped_age_rating = models.CharField(max_length=20, blank=True, null=True)
+
+    # Plex's `thumb` value carries a revision token that changes whenever the
+    # poster art changes. last_thumb_key is the value we last observed;
+    # last_uploaded_thumb_key is the value Plex assigned right after *our*
+    # last upload, used to tell "still our poster" apart from "something
+    # replaced it" without downloading/hashing the image every run.
+    last_thumb_key = models.CharField(max_length=255, blank=True, default='')
+    last_uploaded_thumb_key = models.CharField(max_length=255, blank=True, default='')
+    original_poster_cache_path = models.CharField(max_length=500, blank=True, default='')
+
+    mdblist_checked_at = models.DateTimeField(blank=True, null=True)
+    stamped_at = models.DateTimeField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['plex_instance', 'rating_key'], name='uniq_plex_poster_state'),
+        ]
+        indexes = [
+            models.Index(fields=['plex_instance', 'imdb_id'], name='idx_plex_poster_imdb'),
+        ]
+
+    def __str__(self):
+        return f"{self.plex_instance_id}:{self.rating_key} {self.title or ''}".strip()
+
 class InstanceChangeLog(models.Model):
     INSTANCE_TYPES = [
         ('radarr', 'Radarr'),
