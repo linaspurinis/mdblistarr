@@ -6,11 +6,16 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 # minWidth 30 / minHeight 22 / cornerRadius 6 / font size 12 bold, designed
 # against a ~115pt poster (the standard 3-column grid card width) — expressed
 # here as ratios of the poster's pixel width so it scales to any resolution.
+# BADGE_SIZE_SCALE shrinks the badge box (height/min-width/radius) while
+# BADGE_FONT_RATIO stays pinned to the verified iOS font size — box got
+# smaller than the reference, font didn't.
 BADGE_MARGIN_RATIO = 0.035
-BADGE_HEIGHT_RATIO = 22 / 115
-BADGE_MIN_WIDTH_RATIO = 30 / 115
+BADGE_SIZE_SCALE = 0.82
+BADGE_HEIGHT_RATIO = (22 / 115) * BADGE_SIZE_SCALE
+BADGE_MIN_WIDTH_RATIO = (30 / 115) * BADGE_SIZE_SCALE
 BADGE_RADIUS_RATIO = 6 / 22    # of badge height
-BADGE_FONT_RATIO = 12 / 22     # of badge height
+BADGE_FONT_SCALE = 0.9
+BADGE_FONT_RATIO = (12 / 115) * BADGE_FONT_SCALE  # of poster width — independent of badge height, so it doesn't shrink with the box
 BADGE_TEXT_PADDING_RATIO = 0.18  # of badge height; only matters once text exceeds the min-width floor
 BADGE_FG = (255, 255, 255, 255)
 BADGE_FILL_ALPHA = 242  # ~0.95 opacity, matching MDBScoreBadge's .opacity(0.95)
@@ -111,7 +116,7 @@ def render_badges(image_bytes, score=None, age_rating=None):
     min_width = int(round(width * BADGE_MIN_WIDTH_RATIO))
     radius = int(round(badge_height * BADGE_RADIUS_RATIO))
     text_padding = badge_height * BADGE_TEXT_PADDING_RATIO
-    font = _font_for_height(int(round(badge_height * BADGE_FONT_RATIO)))
+    font = _font_for_height(int(round(width * BADGE_FONT_RATIO)))
     shadow_y_offset = max(1, int(round(width * SHADOW_Y_OFFSET_RATIO)))
     blur_radius = max(1, int(round(width * SHADOW_BLUR_RATIO)))
 
@@ -122,7 +127,7 @@ def render_badges(image_bytes, score=None, age_rating=None):
         geometry = _badge_geometry(image.size, text, font, 'top-left', badge_height, min_width, radius, text_padding)
         badges.append((text, color, geometry))
     if age_rating:
-        text = f"age {age_rating}"
+        text = age_rating
         geometry = _badge_geometry(image.size, text, font, 'bottom-right', badge_height, min_width, radius, text_padding)
         badges.append((text, AGE_BADGE_BG, geometry))
 
