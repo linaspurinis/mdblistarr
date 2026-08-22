@@ -17,6 +17,7 @@ from django.db import connections, transaction
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_POST, require_http_methods
@@ -26,7 +27,7 @@ from .connect import Connect, sanitize_text
 from .models import Preferences, RadarrInstance, SonarrInstance, PlexInstance, PlexSyncRun
 from .services import get_mdblistarr, reset_mdblistarr
 from .plex_api import PLEX_CLIENT_ID, PLEX_PRODUCT, PLEX_VERSION, PLEX_DEVICE
-from .plex_sync import sync_plex_posters
+from .plex_sync import sync_plex_posters, reset_plex_posters, poster_states_in_scope
 
 logger = logging.getLogger(__name__)
 
@@ -238,12 +239,13 @@ class PlexInstanceForm(forms.ModelForm):
 
     class Meta:
         model = PlexInstance
-        fields = ['name', 'url', 'library_ids', 'badge_score_enabled', 'badge_age_rating_enabled']
+        fields = ['name', 'url', 'library_ids', 'badge_score_enabled', 'badge_age_rating_enabled', 'sync_audience_rating_enabled']
         widgets = {
             'name': forms.TextInput(attrs={'placeholder': 'Instance Name', 'class': 'form-control'}),
             'url': forms.TextInput(attrs={'placeholder': 'Connect with Plex to fill this in', 'class': 'form-control', 'readonly': 'readonly'}),
             'badge_score_enabled': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'badge_age_rating_enabled': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'sync_audience_rating_enabled': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -588,6 +590,7 @@ def home_view(request):
         'active_sonarr_id': active_sonarr_id,
         'active_plex_id': active_plex_id,
         'plex_instances': plex_instances,
+        'plex_has_synced_items': poster_states_in_scope().exists(),
         'active_tab': request.session.get('active_tab', 'mdblist'),
         'oauth_connected': oauth_connected,
         'oauth_username': oauth_username,
@@ -835,6 +838,7 @@ def test_plex_connection(request):
 def _plex_run_status_payload(run):
     return {
         'status': run.status,
+        'kind': run.kind,
         'total_items': run.total_items,
         'processed_items': run.processed_items,
         'stamped': run.stamped,
@@ -847,26 +851,52 @@ def _plex_run_status_payload(run):
     }
 
 
-def _run_plex_sync_in_background():
+def _run_plex_job_in_background(job_func, run):
     try:
-        sync_plex_posters()
+        job_func(run=run)
     finally:
         # This thread outlives the request that started it; make sure it
-        # doesn't hold a DB connection open past the sync finishing.
+        # doesn't hold a DB connection open past the job finishing.
         connections.close_all()
 
 
-@require_POST
-def plex_sync_start(request):
+def _start_plex_job(kind, job_func):
+    """
+    Creates the PlexSyncRun row synchronously (in the request thread) before
+    spawning the background worker thread — otherwise a request arriving
+    right after this one could run its own "is anything running" check
+    before the spawned thread has gotten around to creating that row, and
+    wrongly conclude nothing is running.
+    """
     latest = PlexSyncRun.objects.order_by('-started_at').first()
     if latest and latest.status == 'running':
         return JsonResponse(_plex_run_status_payload(latest))
 
+    run = PlexSyncRun.objects.create(status='running', started_at=timezone.now(), kind=kind)
+    threading.Thread(target=_run_plex_job_in_background, args=(job_func, run), daemon=True).start()
+    return JsonResponse(_plex_run_status_payload(run))
+
+
+@require_POST
+def plex_sync_start(request):
     if not PlexInstance.objects.exists():
+        latest = PlexSyncRun.objects.order_by('-started_at').first()
+        if latest and latest.status == 'running':
+            return JsonResponse(_plex_run_status_payload(latest))
         return JsonResponse({'status': 'error', 'message': 'No Plex servers configured'}, status=400)
 
-    threading.Thread(target=_run_plex_sync_in_background, daemon=True).start()
-    return JsonResponse({'status': 'running'})
+    return _start_plex_job('sync', sync_plex_posters)
+
+
+@require_POST
+def plex_reset_start(request):
+    if not poster_states_in_scope().exists():
+        latest = PlexSyncRun.objects.order_by('-started_at').first()
+        if latest and latest.status == 'running':
+            return JsonResponse(_plex_run_status_payload(latest))
+        return JsonResponse({'status': 'error', 'message': 'Nothing to reset in your currently selected libraries'}, status=400)
+
+    return _start_plex_job('reset', reset_plex_posters)
 
 
 def plex_sync_status(request):

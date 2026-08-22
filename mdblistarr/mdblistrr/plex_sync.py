@@ -14,7 +14,16 @@ from .services import get_mdblistarr, reset_mdblistarr
 logger = logging.getLogger(__name__)
 
 PLEX_POSTER_PROVIDER = 4  # Log.provider code for this job
-MDBLIST_RECHECK_INTERVAL = timedelta(hours=24)
+
+# Recently-released titles' scores/ratings move faster (still accumulating
+# votes) and are more likely to be actively watched, so they're worth
+# rechecking more often than a title from a decade ago. "Recent" = released
+# this year or last year, by Plex's own `year` field (already returned for
+# free in the library listing, so this costs nothing extra to check).
+MDBLIST_RECHECK_INTERVAL_RECENT = timedelta(hours=24)
+MDBLIST_RECHECK_INTERVAL_OLDER = timedelta(hours=48)
+RECENT_YEAR_WINDOW = 1
+
 MDBLIST_BATCH_SIZE = 200  # api.mdblist.com hard limit per batch lookup request
 POSTER_CACHE_ROOT = Path(os.environ.get('MDBLISTARR_POSTER_CACHE_DIR', '/usr/src/db/plex_poster_cache'))
 GUID_PROVIDER_PREFERENCE = ('imdb', 'tmdb', 'tvdb')
@@ -96,14 +105,33 @@ def _extract_score_and_age(media_info):
     return score, age_rating
 
 
-def _needs_mdblist_check(item, state, now):
+def _recheck_interval(item):
+    year = item.get('year')
+    if year and year >= timezone.now().year - RECENT_YEAR_WINDOW:
+        return MDBLIST_RECHECK_INTERVAL_RECENT
+    return MDBLIST_RECHECK_INTERVAL_OLDER
+
+
+def _needs_mdblist_check(item, state, now, instance):
     if not state:
         return True
     thumb_is_ours = bool(item['thumb']) and item['thumb'] == state.last_uploaded_thumb_key
     if not thumb_is_ours:
         return True
-    stale = not state.mdblist_checked_at or (now - state.mdblist_checked_at) > MDBLIST_RECHECK_INTERVAL
+    if instance.sync_audience_rating_enabled and state.synced_audience_rating is None:
+        return True  # rating sync just turned on; this item has never been rated by us
+    stale = not state.mdblist_checked_at or (now - state.mdblist_checked_at) > _recheck_interval(item)
     return stale
+
+
+def _poster_is_dirty(item, state, badge_score, badge_age):
+    if badge_score is None and badge_age is None:
+        return False
+    if not state:
+        return True
+    if item['thumb'] != state.last_uploaded_thumb_key:
+        return True  # foreign change (or first run) — needs a fresh stamp regardless
+    return state.stamped_score != badge_score or state.stamped_age_rating != badge_age
 
 
 def _original_poster_bytes(item, state):
@@ -123,53 +151,66 @@ def _original_poster_bytes(item, state):
     return None, False
 
 
-def _stamp_item(plex, instance, section_id, media_type, item, state, score, age_rating, now):
+def _apply_item(plex, instance, section_id, media_type, item, state, badge_score, badge_age, target_plex_rating, poster_dirty, now):
     rating_key = item['rating_key']
     guids = item['guids']
+    if state is None:
+        state = PlexPosterState(plex_instance=instance, rating_key=rating_key)
 
-    original_bytes, from_cache = _original_poster_bytes(item, state)
-    if original_bytes is None:
-        if from_cache:
+    state.section_id = section_id
+    state.section_type = media_type
+    state.imdb_id = guids.get('imdb')
+    state.tmdb_id = guids.get('tmdb')
+    state.tvdb_id = guids.get('tvdb')
+    state.title = item.get('title')
+
+    had_error = False
+
+    if poster_dirty:
+        original_bytes, from_cache = _original_poster_bytes(item, state)
+        cache_path = None
+        if original_bytes is None and from_cache:
             # Active poster is ours but its cached source is missing; skip
             # rather than risk double-stamping an already-badged image.
-            return 'error'
-        if not item['thumb']:
-            return 'error'
-        original_bytes = plex.get_poster_bytes(item['thumb'])
-        if not original_bytes:
-            return 'error'
-        cache_path = _cache_path(instance.id, rating_key)
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_bytes(original_bytes)
-    else:
-        cache_path = Path(state.original_poster_cache_path)
+            had_error = True
+        elif original_bytes is None:
+            if not item['thumb']:
+                had_error = True
+            else:
+                original_bytes = plex.get_poster_bytes(item['thumb'])
+                if not original_bytes:
+                    had_error = True
+                else:
+                    cache_path = _cache_path(instance.id, rating_key)
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    cache_path.write_bytes(original_bytes)
+        else:
+            cache_path = Path(state.original_poster_cache_path)
 
-    stamped_bytes = render_badges(original_bytes, score=score, age_rating=age_rating)
-    if not plex.upload_poster(rating_key, stamped_bytes):
-        return 'error'
+        if not had_error:
+            stamped_bytes = render_badges(original_bytes, score=badge_score, age_rating=badge_age)
+            if plex.upload_poster(rating_key, stamped_bytes):
+                new_thumb = plex.get_item_thumb(rating_key) or ''
+                state.stamped_score = badge_score
+                state.stamped_age_rating = badge_age
+                state.last_thumb_key = new_thumb
+                state.last_uploaded_thumb_key = new_thumb
+                state.original_poster_cache_path = str(cache_path)
+                state.stamped_at = now
+            else:
+                had_error = True
 
-    new_thumb = plex.get_item_thumb(rating_key) or ''
+    if target_plex_rating is not None:
+        if state.original_audience_rating is None:
+            state.original_audience_rating = item.get('audience_rating')
+        if plex.set_audience_rating(section_id, media_type, rating_key, target_plex_rating, locked=True):
+            state.synced_audience_rating = target_plex_rating
+        else:
+            had_error = True
 
-    PlexPosterState.objects.update_or_create(
-        plex_instance=instance,
-        rating_key=rating_key,
-        defaults={
-            'section_id': section_id,
-            'section_type': media_type,
-            'imdb_id': guids.get('imdb'),
-            'tmdb_id': guids.get('tmdb'),
-            'tvdb_id': guids.get('tvdb'),
-            'title': item.get('title'),
-            'stamped_score': score,
-            'stamped_age_rating': age_rating,
-            'last_thumb_key': new_thumb,
-            'last_uploaded_thumb_key': new_thumb,
-            'original_poster_cache_path': str(cache_path),
-            'mdblist_checked_at': now,
-            'stamped_at': now,
-        },
-    )
-    return 'stamped'
+    state.mdblist_checked_at = now
+    state.save()
+    return 'error' if had_error else 'updated'
 
 
 def _sync_section(plex, mdblistarr, instance, section, run):
@@ -189,7 +230,7 @@ def _sync_section(plex, mdblistarr, instance, section, run):
     }
 
     now = timezone.now()
-    needs_check = [it for it in items if _needs_mdblist_check(it, states.get(it['rating_key']), now)]
+    needs_check = [it for it in items if _needs_mdblist_check(it, states.get(it['rating_key']), now, instance)]
     cheap_skip_count = len(items) - len(needs_check)
     if cheap_skip_count:
         _record_progress(run, processed=cheap_skip_count, skipped=cheap_skip_count)
@@ -214,8 +255,8 @@ def _sync_section(plex, mdblistarr, instance, section, run):
 
     for item in needs_check:
         # Each item here already does real network I/O (mdblist was already
-        # batched above; stamping does an image download/upload), so a cheap
-        # per-item cancellation check adds negligible overhead and keeps
+        # batched above; stamping/rating-sync does further Plex calls), so a
+        # cheap per-item cancellation check adds negligible overhead and keeps
         # Cancel responsive even on small/medium libraries.
         _check_cancelled(run)
 
@@ -231,42 +272,56 @@ def _sync_section(plex, mdblistarr, instance, section, run):
             continue
 
         score, age_rating = _extract_score_and_age(media_info)
-        if not instance.badge_score_enabled:
-            score = None
-        if not instance.badge_age_rating_enabled:
-            age_rating = None
-        if score is None and age_rating is None:
+        badge_score = score if instance.badge_score_enabled else None
+        badge_age = age_rating if instance.badge_age_rating_enabled else None
+        rating_wanted = instance.sync_audience_rating_enabled and score is not None
+
+        if badge_score is None and badge_age is None and not rating_wanted:
             _record_progress(run, processed=1, skipped=1, current_title=item.get('title'))
             continue
 
         state = states.get(rating_key)
-        if state and item['thumb'] == state.last_uploaded_thumb_key \
-                and state.stamped_score == score and state.stamped_age_rating == age_rating:
-            state.mdblist_checked_at = now
-            state.last_thumb_key = item['thumb']
-            state.save(update_fields=['mdblist_checked_at', 'last_thumb_key', 'updated_at'])
+        poster_dirty = _poster_is_dirty(item, state, badge_score, badge_age)
+        target_plex_rating = round(score / 10, 1) if rating_wanted else None
+        rating_dirty = rating_wanted and (not state or state.synced_audience_rating != target_plex_rating)
+
+        if not poster_dirty and not rating_dirty:
+            if state:
+                state.mdblist_checked_at = now
+                state.last_thumb_key = item['thumb']
+                state.save(update_fields=['mdblist_checked_at', 'last_thumb_key', 'updated_at'])
             _record_progress(run, processed=1, skipped=1, current_title=item.get('title'))
             continue
 
         try:
-            result = _stamp_item(plex, instance, section_id, media_type, item, state, score, age_rating, now)
+            result = _apply_item(
+                plex, instance, section_id, media_type, item, state,
+                badge_score, badge_age, target_plex_rating if rating_dirty else None,
+                poster_dirty, now,
+            )
         except Exception:
-            logger.error(f"Plex poster stamp failed for rating_key={rating_key}: {traceback.format_exc()}")
+            logger.error(f"Plex item update failed for rating_key={rating_key}: {traceback.format_exc()}")
             result = 'error'
 
         _record_progress(
             run, processed=1, current_title=item.get('title'),
-            stamped=1 if result == 'stamped' else 0,
-            skipped=1 if result == 'skipped' else 0,
+            stamped=1 if result == 'updated' else 0,
             errors=1 if result == 'error' else 0,
         )
 
 
-def sync_plex_posters():
-    if PlexSyncRun.objects.filter(status='running').exists():
-        return {'response': 'AlreadyRunning'}
-
-    run = PlexSyncRun.objects.create(status='running', started_at=timezone.now())
+def sync_plex_posters(run=None):
+    """
+    `run` may be passed in already-created (e.g. by the view that spawned the
+    background thread, so the PlexSyncRun row exists — and is visible to any
+    concurrent status/start check — before the thread even starts running).
+    When called without one (e.g. the cron task), it creates + single-flight
+    guards its own run.
+    """
+    if run is None:
+        if PlexSyncRun.objects.filter(status='running').exists():
+            return {'response': 'AlreadyRunning'}
+        run = PlexSyncRun.objects.create(status='running', started_at=timezone.now(), kind='sync')
 
     try:
         reset_mdblistarr()
@@ -318,5 +373,119 @@ def sync_plex_posters():
         _save_log(2, f'{traceback.format_exc()}')
         return {'response': 'Exception'}
 
-    _save_log(1, f"Plex poster sync: stamped={run.stamped} skipped={run.skipped} errors={run.errors} status={run.status}")
+    _save_log(1, f"Plex poster sync: updated={run.stamped} skipped={run.skipped} errors={run.errors} status={run.status}")
     return {"response": "Ok", "status": run.status, "stamped": run.stamped, "skipped": run.skipped, "error": run.errors}
+
+
+def poster_states_in_scope():
+    """
+    PlexPosterState rows whose section is still selected in that instance's
+    library_ids — the same population sync_plex_posters() would touch.
+    reset_plex_posters() mirrors this scope since the two actions sit
+    side-by-side in the UI and should behave symmetrically: reset only
+    reverts what a sync would currently (re)touch, not every item mdblistarr
+    has ever changed regardless of what's still selected.
+    """
+    queryset = PlexPosterState.objects.none()
+    for instance in PlexInstance.objects.order_by('id'):
+        library_ids = [lid for lid in (instance.library_ids or '').split(',') if lid.strip()]
+        if not library_ids:
+            continue
+        queryset = queryset | PlexPosterState.objects.filter(plex_instance=instance, section_id__in=library_ids)
+    return queryset
+
+
+def _reset_item(plex, state):
+    had_error = False
+
+    if state.original_poster_cache_path:
+        cache_path = Path(state.original_poster_cache_path)
+        if cache_path.exists():
+            if not plex.upload_poster(state.rating_key, cache_path.read_bytes()):
+                had_error = True
+        # No cached original on disk: nothing we can restore poster-wise, but
+        # that's not itself an error worth failing the whole item over.
+
+    if state.synced_audience_rating is not None:
+        restore_value = state.original_audience_rating if state.original_audience_rating is not None else 0
+        if not plex.set_audience_rating(state.section_id, state.section_type, state.rating_key, restore_value, locked=False):
+            had_error = True
+
+    if not had_error:
+        state.delete()
+    return 'error' if had_error else 'reset'
+
+
+def reset_plex_posters(run=None):
+    """
+    Reverts what mdblistarr has changed (posters and, if it was enabled,
+    audience ratings) back to what Plex had before, using the same cached
+    originals the sync job already keeps for its own dedup logic. Scoped to
+    the same items sync_plex_posters() would currently touch — i.e. only
+    currently-selected libraries — since the two actions sit next to each
+    other in the UI and should behave symmetrically (see poster_states_in_scope).
+
+    See sync_plex_posters() for the `run` parameter's purpose.
+    """
+    if run is None:
+        if PlexSyncRun.objects.filter(status='running').exists():
+            return {'response': 'AlreadyRunning'}
+        run = PlexSyncRun.objects.create(status='running', started_at=timezone.now(), kind='reset')
+
+    try:
+        states = list(poster_states_in_scope().select_related('plex_instance'))
+        run.total_items = len(states)
+        run.save(update_fields=['total_items'])
+
+        if not states:
+            run.status = 'complete'
+            run.finished_at = timezone.now()
+            run.save()
+            return {'response': 'Ok', 'status': run.status, 'reset': 0, 'error': 0}
+
+        plex_by_instance = {}
+
+        for state in states:
+            _check_cancelled(run)
+            instance = state.plex_instance
+            plex = plex_by_instance.get(instance.id)
+            if plex is None:
+                try:
+                    plex = PlexServerAPI(instance_id=instance.id)
+                except Exception:
+                    plex = False
+                plex_by_instance[instance.id] = plex
+
+            if not plex:
+                _record_progress(run, processed=1, errors=1, current_title=state.title)
+                continue
+
+            try:
+                result = _reset_item(plex, state)
+            except Exception:
+                logger.error(f"Plex poster reset failed for rating_key={state.rating_key}: {traceback.format_exc()}")
+                result = 'error'
+
+            _record_progress(
+                run, processed=1, current_title=state.title,
+                stamped=1 if result == 'reset' else 0,
+                errors=1 if result == 'error' else 0,
+            )
+
+        run.status = 'complete'
+        run.finished_at = timezone.now()
+        run.save()
+    except PlexSyncCancelled:
+        run.status = 'cancelled'
+        run.finished_at = timezone.now()
+        run.save()
+    except Exception:
+        run.status = 'error'
+        run.error_message = traceback.format_exc()[:2000]
+        run.finished_at = timezone.now()
+        run.save()
+        _save_log(2, f'{traceback.format_exc()}')
+        return {'response': 'Exception'}
+
+    _save_log(1, f"Plex poster reset: reset={run.stamped} errors={run.errors} status={run.status}")
+    return {"response": "Ok", "status": run.status, "reset": run.stamped, "error": run.errors}

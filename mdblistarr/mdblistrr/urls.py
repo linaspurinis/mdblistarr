@@ -17,6 +17,7 @@ urlpatterns = [
     path('plex/auth/start', views.plex_auth_start, name='plex_auth_start'),
     path('plex/auth/poll', views.plex_auth_poll, name='plex_auth_poll'),
     path('plex/sync/start', views.plex_sync_start, name='plex_sync_start'),
+    path('plex/reset/start', views.plex_reset_start, name='plex_reset_start'),
     path('plex/sync/status', views.plex_sync_status, name='plex_sync_status'),
     path('plex/sync/cancel', views.plex_sync_cancel, name='plex_sync_cancel'),
 ]

@@ -127,8 +127,13 @@ class PlexSyncRun(models.Model):
         ('cancelled', 'Cancelled'),
         ('error', 'Error'),
     ]
+    KIND_CHOICES = [
+        ('sync', 'Sync'),
+        ('reset', 'Reset to original'),
+    ]
 
     id = models.AutoField(primary_key=True)
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default='sync')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='running')
     started_at = models.DateTimeField()
     finished_at = models.DateTimeField(blank=True, null=True)
@@ -153,6 +158,7 @@ class PlexInstance(models.Model):
     library_ids = models.CharField(max_length=500, blank=True, default='')
     badge_score_enabled = models.BooleanField(default=True)
     badge_age_rating_enabled = models.BooleanField(default=True)
+    sync_audience_rating_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -186,6 +192,13 @@ class PlexPosterState(models.Model):
     last_thumb_key = models.CharField(max_length=255, blank=True, default='')
     last_uploaded_thumb_key = models.CharField(max_length=255, blank=True, default='')
     original_poster_cache_path = models.CharField(max_length=500, blank=True, default='')
+
+    # Audience-rating override (optional, off by default): original_audience_rating
+    # is the RT/IMDb-sourced value Plex had before our first override — cached once,
+    # so the value is recoverable if the feature is turned off. synced_audience_rating
+    # is the value (Plex's 0-10 scale) we last set, for change detection.
+    original_audience_rating = models.FloatField(blank=True, null=True)
+    synced_audience_rating = models.FloatField(blank=True, null=True)
 
     mdblist_checked_at = models.DateTimeField(blank=True, null=True)
     stamped_at = models.DateTimeField(blank=True, null=True)

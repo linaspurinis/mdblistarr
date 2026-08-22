@@ -156,3 +156,9 @@ class Connect:
         if headers is None:
             headers = DEFAULT_HEADERS
         return self.session.post(url, data=data, json=json, params=params, headers=headers, cookies=cookies)
+
+    @retry(stop=stop_after_attempt(6), wait=wait_fixed(10))
+    def put(self, url, data=None, json=None, headers=None, params=None, cookies=None):
+        if headers is None:
+            headers = DEFAULT_HEADERS
+        return self.session.put(url, data=data, json=json, params=params, headers=headers, cookies=cookies)

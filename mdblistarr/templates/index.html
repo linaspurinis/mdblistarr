@@ -410,6 +410,7 @@
                     {% else %}
                         <div class="d-flex align-items-center gap-2 mb-2">
                             <button type="button" class="btn btn-info" id="plexSyncStartBtn">Sync Now</button>
+                            <button type="button" class="btn btn-outline-secondary" id="plexResetStartBtn" {% if not plex_has_synced_items %}disabled{% endif %}>Reset to Original</button>
                             <button type="button" class="btn btn-outline-danger" id="plexSyncCancelBtn" style="display:none;">Cancel</button>
                         </div>
                         <div class="progress mb-2" style="height: 1.25rem; display:none;" id="plexSyncProgressWrapper">
@@ -496,6 +497,11 @@
                         <div class="fieldWrapper mb-3 form-check">
                             {{ plex_form.badge_age_rating_enabled }}
                             {{ plex_form.badge_age_rating_enabled.label_tag }}
+                        </div>
+                        <div class="fieldWrapper mb-3 form-check">
+                            {{ plex_form.sync_audience_rating_enabled }}
+                            {{ plex_form.sync_audience_rating_enabled.label_tag }}
+                            <div class="form-text">Overwrites Plex's Audience Rating with the mdblist score (locked, so Plex won't revert it), so you can sort your library by it. The original rating is saved and can be restored with "Reset to Original" above.</div>
                         </div>
 
                         <div id="plexTestResult" class="small mb-2"></div>
@@ -1025,8 +1031,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Plex poster sync — runs in a background thread server-side; this just polls for progress.
+    // Plex poster sync / reset — both run in a background thread server-side
+    // (only one at a time); this just polls for progress.
     const plexSyncStartBtn = document.getElementById('plexSyncStartBtn');
+    const plexResetStartBtn = document.getElementById('plexResetStartBtn');
     const plexSyncCancelBtn = document.getElementById('plexSyncCancelBtn');
     const plexSyncProgressWrapper = document.getElementById('plexSyncProgressWrapper');
     const plexSyncProgressBar = document.getElementById('plexSyncProgressBar');
@@ -1048,8 +1056,13 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderPlexSyncStatus(data) {
         if (!plexSyncStartBtn) return; // no Plex servers configured yet
 
+        const isReset = data.kind === 'reset';
+        const doneWord = isReset ? 'reset' : 'updated';
+        const doneCount = data.stamped;
+
         if (data.status === 'running') {
             plexSyncStartBtn.style.display = 'none';
+            plexResetStartBtn.style.display = 'none';
             plexSyncCancelBtn.style.display = 'inline-block';
             plexSyncCancelBtn.disabled = false;
             plexSyncCancelBtn.textContent = 'Cancel';
@@ -1061,14 +1074,17 @@ document.addEventListener('DOMContentLoaded', function() {
             plexSyncProgressBar.classList.toggle('progress-bar-striped', data.total_items === 0);
             plexSyncProgressBar.classList.toggle('progress-bar-animated', data.total_items === 0);
 
-            const parts = [`${data.processed_items} / ${data.total_items || '?'} items`];
-            parts.push(`stamped ${data.stamped}`, `skipped ${data.skipped}`, `errors ${data.errors}`);
+            const parts = [`${isReset ? 'Resetting' : 'Syncing'}: ${data.processed_items} / ${data.total_items || '?'} items`];
+            parts.push(`${doneWord} ${doneCount}`);
+            if (!isReset) parts.push(`skipped ${data.skipped}`);
+            parts.push(`errors ${data.errors}`);
             if (data.current_title) parts.push(`— ${data.current_title}`);
             plexSyncStatusText.textContent = parts.join(' · ');
 
             schedulePlexSyncPoll();
         } else {
             plexSyncStartBtn.style.display = 'inline-block';
+            plexResetStartBtn.style.display = 'inline-block';
             plexSyncCancelBtn.style.display = 'none';
             plexSyncProgressWrapper.style.display = 'none';
             stopPlexSyncPolling();
@@ -1076,13 +1092,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.status === 'idle') {
                 plexSyncStatusText.textContent = '';
             } else if (data.status === 'complete') {
-                plexSyncStatusText.textContent =
-                    `Last sync ${timeAgo(data.finished_at)}: stamped ${data.stamped}, skipped ${data.skipped}, errors ${data.errors}`;
+                plexSyncStatusText.textContent = isReset
+                    ? `Reset ${timeAgo(data.finished_at)}: restored ${doneCount}, errors ${data.errors}`
+                    : `Last sync ${timeAgo(data.finished_at)}: stamped ${data.stamped}, skipped ${data.skipped}, errors ${data.errors}`;
             } else if (data.status === 'cancelled') {
                 plexSyncStatusText.textContent =
-                    `Cancelled ${timeAgo(data.finished_at)} — stamped ${data.stamped}, skipped ${data.skipped} before stopping`;
+                    `Cancelled ${timeAgo(data.finished_at)} — ${doneWord} ${doneCount} before stopping`;
             } else if (data.status === 'error') {
-                plexSyncStatusText.textContent = 'Last sync failed: ' + (data.error_message || 'unknown error');
+                plexSyncStatusText.textContent = `Last ${isReset ? 'reset' : 'sync'} failed: ` + (data.error_message || 'unknown error');
             }
         }
     }
@@ -1103,19 +1120,28 @@ document.addEventListener('DOMContentLoaded', function() {
         if (plexSyncPollTimer) { clearTimeout(plexSyncPollTimer); plexSyncPollTimer = null; }
     }
 
-    plexSyncStartBtn?.addEventListener('click', function() {
-        plexSyncStartBtn.disabled = true;
-        fetch('/plex/sync/start', {method: 'POST', headers: {'X-CSRFToken': csrfToken()}})
+    function startPlexJob(button, endpoint, defaultErrorMsg) {
+        button.disabled = true;
+        fetch(endpoint, {method: 'POST', headers: {'X-CSRFToken': csrfToken()}})
             .then(r => r.json())
             .then(data => {
-                plexSyncStartBtn.disabled = false;
+                button.disabled = false;
                 if (data.status === 'error') {
-                    plexSyncStatusText.textContent = data.message || 'Failed to start sync';
+                    plexSyncStatusText.textContent = data.message || defaultErrorMsg;
                     return;
                 }
                 renderPlexSyncStatus(data);
             })
-            .catch(() => { plexSyncStartBtn.disabled = false; });
+            .catch(() => { button.disabled = false; });
+    }
+
+    plexSyncStartBtn?.addEventListener('click', function() {
+        startPlexJob(plexSyncStartBtn, '/plex/sync/start', 'Failed to start sync');
+    });
+
+    plexResetStartBtn?.addEventListener('click', function() {
+        if (!confirm('Reset posters and ratings in your currently selected libraries back to their originals? This cannot be undone.')) return;
+        startPlexJob(plexResetStartBtn, '/plex/reset/start', 'Failed to start reset');
     });
 
     plexSyncCancelBtn?.addEventListener('click', function() {
