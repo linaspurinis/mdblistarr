@@ -34,6 +34,10 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr, Sonarr, 
 
 - Connect via a Plex PIN-based flow (click "Connect with Plex", authorize on plex.tv) — no manual token copying.
 
+### Plex poster badges
+
+<img width="1390" height="816" alt="Plex poster badges showing mdblist score and age rating" src="https://github.com/user-attachments/assets/c0f996ff-f282-484a-97e2-e4b17a6e10c6" />
+
 ## New in v2.4.0
 
 - **Authentication required**: every page now sits behind login. On first run you're taken to a one-time setup screen to create the administrator account, instead of the previous default `admin`/`admin` credentials created automatically on every boot.
