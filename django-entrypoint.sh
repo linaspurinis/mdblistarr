@@ -12,6 +12,7 @@ python /usr/src/app/manage.py reconcile_migrations
 python /usr/src/app/manage.py migrate
 python /usr/src/app/manage.py encrypt_secrets
 python /usr/src/app/manage.py secure_startup
+python /usr/src/app/manage.py cleanup_plex_runs
 cp /usr/src/app/mdblist/urls.py.2 /usr/src/app/mdblist/urls.py
 
 python /usr/src/app/manage.py run_task_scheduler &
