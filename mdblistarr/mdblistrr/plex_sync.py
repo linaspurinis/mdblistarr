@@ -41,8 +41,10 @@ def _save_log(status, text):
 def _check_cancelled(run):
     if run is None:
         return
-    run.refresh_from_db(fields=['cancel_requested'])
-    if run.cancel_requested:
+    # status is refreshed too: a force stop (see views.plex_sync_cancel) marks
+    # the run finished directly, without waiting for this worker.
+    run.refresh_from_db(fields=['cancel_requested', 'status'])
+    if run.cancel_requested or run.status != 'running':
         raise PlexSyncCancelled()
 
 

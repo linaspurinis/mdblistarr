@@ -1066,7 +1066,7 @@ document.addEventListener('DOMContentLoaded', function() {
             plexResetStartBtn.style.display = 'none';
             plexSyncCancelBtn.style.display = 'inline-block';
             plexSyncCancelBtn.disabled = false;
-            plexSyncCancelBtn.textContent = 'Cancel';
+            plexSyncCancelBtn.textContent = data.cancel_requested ? 'Force stop' : 'Cancel';
             plexSyncProgressWrapper.style.display = 'block';
 
             const pct = data.total_items > 0 ? Math.min(100, Math.round(100 * data.processed_items / data.total_items)) : 0;
@@ -1146,9 +1146,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     plexSyncCancelBtn?.addEventListener('click', function() {
+        const force = plexSyncCancelBtn.textContent === 'Force stop';
+        if (force && !confirm('The sync is not responding to Cancel. Force stop it now?')) return;
         plexSyncCancelBtn.disabled = true;
-        plexSyncCancelBtn.textContent = 'Cancelling…';
+        plexSyncCancelBtn.textContent = force ? 'Stopping…' : 'Cancelling…';
         fetch('/plex/sync/cancel', {method: 'POST', headers: {'X-CSRFToken': csrfToken()}})
+            .then(() => pollPlexSyncStatus())
             .catch(() => {});
     });
 

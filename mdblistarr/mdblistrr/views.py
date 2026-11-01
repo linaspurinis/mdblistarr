@@ -857,6 +857,7 @@ def _plex_run_status_payload(run):
         'started_at': run.started_at.isoformat() if run.started_at else None,
         'finished_at': run.finished_at.isoformat() if run.finished_at else None,
         'error_message': run.error_message,
+        'cancel_requested': run.cancel_requested,
     }
 
 
@@ -929,6 +930,15 @@ def plex_sync_status(request):
 
 @require_POST
 def plex_sync_cancel(request):
+    # A second cancel on a run that already has one pending is a force stop:
+    # the worker that should honour cancel_requested may be gone (crashed,
+    # hung on a request) and the run would otherwise stay 'running' forever.
+    # If the worker is still alive, _check_cancelled stops it on its next item.
+    forced = PlexSyncRun.objects.filter(status='running', cancel_requested=True).update(
+        status='cancelled', finished_at=timezone.now(),
+    )
+    if forced:
+        return JsonResponse({'status': 'cancelled'})
     updated = PlexSyncRun.objects.filter(status='running').update(cancel_requested=True)
     return JsonResponse({'status': 'cancelling' if updated else 'idle'})
 
