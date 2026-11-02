@@ -12,6 +12,9 @@ PLEX_DEVICE = 'mdblistarr'
 
 GUID_PROVIDERS = ('imdb', 'tmdb', 'tvdb')
 SECTION_TYPE_CODE = {'movie': 1, 'show': 2}  # Plex's numeric `type` param for the metadata-edit endpoint
+# Single-item calls answer near-instantly, so a hung one shouldn't hold up the
+# sync for Connect's default (sized for full-library listings) x its retries.
+ITEM_TIMEOUT = (10, 60)
 
 
 def parse_guids(metadata_item):
@@ -114,6 +117,7 @@ class PlexServerAPI():
             response = self.connect.get(
                 f"{self.url}/library/metadata/{rating_key}",
                 headers=self._headers(),
+                timeout=ITEM_TIMEOUT,
             )
             data = response.json()
             items = (data.get('MediaContainer') or {}).get('Metadata') or []
@@ -128,6 +132,7 @@ class PlexServerAPI():
             response = self.connect.get(
                 f"{self.url}{thumb_path}",
                 headers={'X-Plex-Token': self.token},
+                timeout=ITEM_TIMEOUT,
             )
             if response.status_code == 200 and response.content:
                 return response.content
@@ -141,6 +146,7 @@ class PlexServerAPI():
                 f"{self.url}/library/metadata/{rating_key}/posters",
                 data=image_bytes,
                 headers={'X-Plex-Token': self.token, 'Content-Type': 'image/jpeg'},
+                timeout=ITEM_TIMEOUT,
             )
             return response.status_code in (200, 201)
         except Exception:
@@ -166,6 +172,7 @@ class PlexServerAPI():
                     'audienceRating.value': value,
                     'audienceRating.locked': 1 if locked else 0,
                 },
+                timeout=ITEM_TIMEOUT,
             )
             return response.status_code in (200, 201)
         except Exception:

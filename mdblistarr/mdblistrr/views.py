@@ -610,7 +610,7 @@ def oauth_device_start(request):
     client_id = (client_id_pref.value if client_id_pref else '') or MDBLIST_DEFAULT_CLIENT_ID
 
     try:
-        r = _requests.post(MDBLIST_DEVICE_AUTH_URL, data={'client_id': client_id, 'scope': 'write'})
+        r = _requests.post(MDBLIST_DEVICE_AUTH_URL, data={'client_id': client_id, 'scope': 'write'}, timeout=30)
         data = r.json()
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -642,7 +642,7 @@ def oauth_device_poll(request):
             'grant_type': MDBLIST_DEVICE_GRANT_TYPE,
             'device_code': device_code,
             'client_id': client_id,
-        })
+        }, timeout=30)
         data = r.json()
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})

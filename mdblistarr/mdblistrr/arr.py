@@ -285,7 +285,7 @@ class MdblistAPI():
                 'grant_type': 'refresh_token',
                 'refresh_token': self.refresh_token,
                 'client_id': self.client_id or MDBLIST_DEFAULT_CLIENT_ID,
-            })
+            }, timeout=30)
             data = r.json()
             if data.get('access_token'):
                 self.access_token = data['access_token']

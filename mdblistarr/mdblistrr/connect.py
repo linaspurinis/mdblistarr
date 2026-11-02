@@ -13,6 +13,13 @@ def sanitize_text(value):
         return value
     return SENSITIVE_RE.sub(lambda m: (m.group(1) + "<redacted>") if m.group(1) else "<redacted>", str(value))
 
+# (connect, read) seconds. The read timeout is the longest gap with no bytes
+# arriving, not the total request time — it only has to cover a server
+# preparing a large response (e.g. a full Radarr/Sonarr or Plex library
+# listing). Without it, a peer that accepts the connection and then goes
+# silent hangs the caller forever.
+DEFAULT_TIMEOUT = (10, 180)
+
 DEFAULT_HEADERS = {
     'accept':'*/*',
     # Avoid advertising brotli unless we're sure the runtime can decode it.
@@ -116,10 +123,10 @@ class Connect:
             return {"error": "request_failed", "exception": str(e), "url": self._redact_url(url)}
 
     @retry(stop=stop_after_attempt(6), wait=wait_fixed(10))
-    def get(self, url, json=None, headers=None, params=None, cookies=None):
+    def get(self, url, json=None, headers=None, params=None, cookies=None, timeout=DEFAULT_TIMEOUT):
         if headers is None:
             headers = DEFAULT_HEADERS
-        return self.session.get(url, json=json, headers=headers, params=params, cookies=cookies)
+        return self.session.get(url, json=json, headers=headers, params=params, cookies=cookies, timeout=timeout)
 
     def get_image_encoded(self, url):
         return base64.b64encode(self.get(url).content).decode('utf-8')
@@ -152,13 +159,13 @@ class Connect:
             return {"error": "Request failed", "exception": str(e)}
 
     @retry(stop=stop_after_attempt(6), wait=wait_fixed(10))
-    def post(self, url, data=None, json=None, headers=None, params=None, cookies=None):
+    def post(self, url, data=None, json=None, headers=None, params=None, cookies=None, timeout=DEFAULT_TIMEOUT):
         if headers is None:
             headers = DEFAULT_HEADERS
-        return self.session.post(url, data=data, json=json, params=params, headers=headers, cookies=cookies)
+        return self.session.post(url, data=data, json=json, params=params, headers=headers, cookies=cookies, timeout=timeout)
 
     @retry(stop=stop_after_attempt(6), wait=wait_fixed(10))
-    def put(self, url, data=None, json=None, headers=None, params=None, cookies=None):
+    def put(self, url, data=None, json=None, headers=None, params=None, cookies=None, timeout=DEFAULT_TIMEOUT):
         if headers is None:
             headers = DEFAULT_HEADERS
-        return self.session.put(url, data=data, json=json, params=params, headers=headers, cookies=cookies)
+        return self.session.put(url, data=data, json=json, params=params, headers=headers, cookies=cookies, timeout=timeout)
