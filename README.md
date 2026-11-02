@@ -24,6 +24,14 @@ Companion app for [mdblist.com](https://mdblist.com) for better Radarr, Sonarr, 
 3. Add your Radarr and Sonarr instances, including quality profile, root folder, tags, and (Sonarr) monitor option.
 4. Let scheduled sync keep MDBList and your ARR apps in sync.
 
+## New in v2.5.1
+
+- Fix: a Plex sync interrupted by a server or container restart no longer stays stuck as "running" forever, blocking every later sync. Leftover runs are cleared automatically on startup.
+- **Force stop**: if a sync doesn't respond to Cancel, the button turns into "Force stop", which ends it immediately.
+- Fix: network requests now time out instead of waiting forever when Plex, MDBList, Radarr or Sonarr stops responding mid-request — a stalled request could previously freeze the Plex sync on one item.
+- If a Plex server stops responding during a sync (5 failed requests in a row), the rest of that server is skipped and the reason is shown, instead of failing every remaining item one slow timeout at a time.
+- Clearer logs: failures now say what was being attempted (library, item, request) and show the actual error (e.g. `Temporary failure in name resolution`) instead of a cut-off traceback. MDBList lookups or Plex libraries that previously failed silently are now logged, and the sync summary includes the last error.
+
 ## New in v2.5.0
 
 - **Plex poster badges**: connect a Plex server and mdblistarr stamps each movie/show poster with the mdblist score (top-left, color-coded the same way mdblist.com and the iOS app color it — green/amber/red by score) and age rating (bottom-right). Toggle either badge on/off per Plex server.
