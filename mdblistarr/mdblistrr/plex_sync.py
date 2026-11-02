@@ -8,6 +8,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from .models import Log, PlexInstance, PlexPosterState, PlexSyncRun
+from .connect import sanitize_text
 from .plex_api import PlexServerAPI
 from .poster_overlay import render_badges
 from .services import get_mdblistarr, reset_mdblistarr
@@ -62,6 +63,28 @@ def _record_progress(run, *, processed=0, stamped=0, skipped=0, errors=0, curren
     run.save(update_fields=fields)
 
 
+def _run_position(run):
+    return f"at item {run.processed_items}/{run.total_items} (last: '{run.current_title}')"
+
+
+def _ensure_run_finished(run):
+    """
+    Safety net for the sync/reset `finally`: if the job ends with its row
+    still 'running' (e.g. the error handler's own run.save() failed with
+    SQLite "database is locked"), mark it failed so it can't block every
+    future run via uniq_plexsyncrun_running.
+    """
+    try:
+        orphaned = PlexSyncRun.objects.filter(id=run.id, status='running').update(
+            status='error', finished_at=timezone.now(),
+            error_message=f"Ended unexpectedly {_run_position(run)}",
+        )
+        if orphaned:
+            _save_log(2, f"Plex {run.kind} ended unexpectedly {_run_position(run)}; see container logs for the traceback")
+    except Exception:
+        logger.error(f"Could not mark PlexSyncRun#{run.id} as finished: {traceback.format_exc()}")
+
+
 def _cache_path(instance_id, rating_key):
     return POSTER_CACHE_ROOT / str(instance_id) / f"{rating_key}.jpg"
 
@@ -73,19 +96,38 @@ def _preferred_provider_and_id(guids):
     return None, None
 
 
-def _lookup_media_info(mdblist_api, provider, media_type, ids):
+def _describe_error_response(res):
+    # arr.py wraps unexpected exceptions as {'error': <full traceback>}; the
+    # last line ("ExceptionType: message") is the part worth logging.
+    if isinstance(res, dict) and 'Traceback (most recent call last)' in str(res.get('error')):
+        return str(res['error']).strip().splitlines()[-1][:500]
+    return str(res)[:500]
+
+
+def _lookup_media_info(mdblist_api, provider, media_type, ids, section_label):
     """Batch-resolve mdblist score/age rating. Returns {provider_id (str): media_info dict}."""
     result_map = {}
+    failed_ids = 0
+    first_error = None
     for i in range(0, len(ids), MDBLIST_BATCH_SIZE):
         chunk = ids[i:i + MDBLIST_BATCH_SIZE]
         res = mdblist_api.get_media_info_batch(provider, media_type, chunk)
         if not isinstance(res, list):
+            failed_ids += len(chunk)
+            first_error = first_error or res
             continue
         for entry in res:
             entry_ids = entry.get('ids') or {}
             key = entry_ids.get(provider)
             if key is not None:
                 result_map[str(key)] = entry
+    if failed_ids:
+        # One line per section rather than per batch; these items are skipped
+        # (not stamped) for this run and retried on the next one.
+        _save_log(2, sanitize_text(
+            f"{section_label}: MDBList lookup failed for {failed_ids} of {len(ids)} {provider} ids, "
+            f"skipping them this run: {_describe_error_response(first_error)}"
+        ))
     return result_map
 
 
@@ -223,8 +265,12 @@ def _apply_item(plex, instance, section_id, media_type, item, state, badge_score
 
 def _sync_section(plex, mdblistarr, instance, section, run):
     section_id, media_type = section['id'], section['type']
+    section_label = f"{instance.name} / {section['title']}"
+    errors_before = plex.error_count
     items = plex.get_section_items(section_id)
     if not items:
+        if plex.error_count > errors_before:
+            _save_log(2, f"{section_label}: could not list library items, skipping it: {plex.last_error}")
         return
 
     if run is not None:
@@ -257,7 +303,7 @@ def _sync_section(plex, mdblistarr, instance, section, run):
         provider_groups.setdefault(provider, []).append(pid)
 
     media_info_by_provider = {
-        provider: _lookup_media_info(mdblistarr.mdblist, provider, media_type, ids)
+        provider: _lookup_media_info(mdblistarr.mdblist, provider, media_type, ids, section_label)
         for provider, ids in provider_groups.items()
     }
 
@@ -308,7 +354,7 @@ def _sync_section(plex, mdblistarr, instance, section, run):
                 poster_dirty, now,
             )
         except Exception:
-            logger.error(f"Plex item update failed for rating_key={rating_key}: {traceback.format_exc()}")
+            logger.error(f"{section_label}: item update failed for '{item.get('title')}' (rating_key={rating_key}): {traceback.format_exc()}")
             result = 'error'
 
         _record_progress(
@@ -349,6 +395,7 @@ def sync_plex_posters(run=None):
             return {"response": "Missing API key"}
 
         instances = list(PlexInstance.objects.order_by('id'))
+        plex_instances = []
         if not instances:
             run.status = 'complete'
             run.finished_at = timezone.now()
@@ -367,7 +414,12 @@ def sync_plex_posters(run=None):
             if not library_ids:
                 continue
 
-            sections = {s['id']: s for s in plex.get_sections() if s['id'] in library_ids}
+            plex_instances.append((instance, plex))
+            all_sections = plex.get_sections()
+            if not all_sections and plex.error_count:
+                _save_log(2, f"{instance.name}: could not list Plex libraries, skipping this server: {plex.last_error}")
+                continue
+            sections = {s['id']: s for s in all_sections if s['id'] in library_ids}
             for section in sections.values():
                 _check_cancelled(run)
                 _sync_section(plex, mdblistarr, instance, section, run)
@@ -384,10 +436,16 @@ def sync_plex_posters(run=None):
         run.error_message = traceback.format_exc()[:2000]
         run.finished_at = timezone.now()
         run.save()
-        _save_log(2, f'{traceback.format_exc()}')
+        _save_log(2, f"Plex poster sync crashed {_run_position(run)}:\n{traceback.format_exc()}")
         return {'response': 'Exception'}
+    finally:
+        _ensure_run_finished(run)
 
-    _save_log(1, f"Plex poster sync: updated={run.stamped} skipped={run.skipped} errors={run.errors} status={run.status}")
+    summary = f"Plex poster sync: updated={run.stamped} skipped={run.skipped} errors={run.errors} status={run.status}"
+    last_errors = [f"{instance.name}: {plex.last_error}" for instance, plex in plex_instances if plex.last_error]
+    if last_errors:
+        summary += " | last error: " + "; ".join(last_errors)
+    _save_log(1 if not run.errors else 2, summary)
     return {"response": "Ok", "status": run.status, "stamped": run.stamped, "skipped": run.skipped, "error": run.errors}
 
 
@@ -460,6 +518,7 @@ def reset_plex_posters(run=None):
             # (uniq_plexsyncrun_running) is the actual single-flight guard.
             return {'response': 'AlreadyRunning'}
 
+    plex_by_instance = {}
     try:
         states = list(poster_states_in_scope().select_related('plex_instance'))
         run.total_items = len(states)
@@ -470,8 +529,6 @@ def reset_plex_posters(run=None):
             run.finished_at = timezone.now()
             run.save()
             return {'response': 'Ok', 'status': run.status, 'reset': 0, 'error': 0}
-
-        plex_by_instance = {}
 
         for state in states:
             _check_cancelled(run)
@@ -491,7 +548,7 @@ def reset_plex_posters(run=None):
             try:
                 result = _reset_item(plex, state)
             except Exception:
-                logger.error(f"Plex poster reset failed for rating_key={state.rating_key}: {traceback.format_exc()}")
+                logger.error(f"Plex poster reset failed for '{state.title}' (rating_key={state.rating_key}): {traceback.format_exc()}")
                 result = 'error'
 
             _record_progress(
@@ -512,8 +569,14 @@ def reset_plex_posters(run=None):
         run.error_message = traceback.format_exc()[:2000]
         run.finished_at = timezone.now()
         run.save()
-        _save_log(2, f'{traceback.format_exc()}')
+        _save_log(2, f"Plex poster reset crashed {_run_position(run)}:\n{traceback.format_exc()}")
         return {'response': 'Exception'}
+    finally:
+        _ensure_run_finished(run)
 
-    _save_log(1, f"Plex poster reset: reset={run.stamped} errors={run.errors} status={run.status}")
+    summary = f"Plex poster reset: reset={run.stamped} errors={run.errors} status={run.status}"
+    last_errors = [f"{plex.name}: {plex.last_error}" for plex in plex_by_instance.values() if plex and plex.last_error]
+    if last_errors:
+        summary += " | last error: " + "; ".join(last_errors)
+    _save_log(1 if not run.errors else 2, summary)
     return {"response": "Ok", "status": run.status, "reset": run.stamped, "error": run.errors}
