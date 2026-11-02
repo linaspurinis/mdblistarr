@@ -29,10 +29,27 @@ RECENT_YEAR_WINDOW = 1
 MDBLIST_BATCH_SIZE = 200  # api.mdblist.com hard limit per batch lookup request
 POSTER_CACHE_ROOT = Path(os.environ.get('MDBLISTARR_POSTER_CACHE_DIR', '/usr/src/db/plex_poster_cache'))
 GUID_PROVIDER_PREFERENCE = ('imdb', 'tmdb', 'tvdb')
+# Requests that failed to connect or timed out back to back (each already
+# retried by Connect). Past this the server is treated as unreachable and
+# skipped for the rest of the run, instead of failing every remaining item
+# one slow timeout at a time.
+MAX_CONSECUTIVE_CONNECTION_FAILURES = 5
 
 
 class PlexSyncCancelled(Exception):
     pass
+
+
+class PlexServerUnreachable(Exception):
+    pass
+
+
+def _check_reachable(plex):
+    if plex.consecutive_connection_failures >= MAX_CONSECUTIVE_CONNECTION_FAILURES:
+        raise PlexServerUnreachable(
+            f"{plex.name}: Plex server unreachable, stopped after {plex.consecutive_connection_failures} "
+            f"failed requests in a row. Last: {plex.last_error}"
+        )
 
 
 def _save_log(status, text):
@@ -362,6 +379,7 @@ def _sync_section(plex, mdblistarr, instance, section, run):
             stamped=1 if result == 'updated' else 0,
             errors=1 if result == 'error' else 0,
         )
+        _check_reachable(plex)
 
 
 def sync_plex_posters(run=None):
@@ -396,6 +414,7 @@ def sync_plex_posters(run=None):
 
         instances = list(PlexInstance.objects.order_by('id'))
         plex_instances = []
+        unreachable = []
         if not instances:
             run.status = 'complete'
             run.finished_at = timezone.now()
@@ -420,11 +439,16 @@ def sync_plex_posters(run=None):
                 _save_log(2, f"{instance.name}: could not list Plex libraries, skipping this server: {plex.last_error}")
                 continue
             sections = {s['id']: s for s in all_sections if s['id'] in library_ids}
-            for section in sections.values():
-                _check_cancelled(run)
-                _sync_section(plex, mdblistarr, instance, section, run)
+            try:
+                for section in sections.values():
+                    _check_cancelled(run)
+                    _sync_section(plex, mdblistarr, instance, section, run)
+            except PlexServerUnreachable as e:
+                _save_log(2, f"Plex poster sync skipped the rest of {instance.name} {_run_position(run)}: {e}")
+                unreachable.append(str(e))
 
-        run.status = 'complete'
+        run.status = 'error' if unreachable else 'complete'
+        run.error_message = '; '.join(unreachable)
         run.finished_at = timezone.now()
         run.save()
     except PlexSyncCancelled:
@@ -519,6 +543,8 @@ def reset_plex_posters(run=None):
             return {'response': 'AlreadyRunning'}
 
     plex_by_instance = {}
+    unreachable = []
+    unreachable_plex = []
     try:
         states = list(poster_states_in_scope().select_related('plex_instance'))
         run.total_items = len(states)
@@ -556,8 +582,18 @@ def reset_plex_posters(run=None):
                 stamped=1 if result == 'reset' else 0,
                 errors=1 if result == 'error' else 0,
             )
+            try:
+                _check_reachable(plex)
+            except PlexServerUnreachable as e:
+                # Remaining items of this server fall through the `not plex`
+                # branch above: counted as errors without any more requests.
+                _save_log(2, f"Plex poster reset skipped the rest of {instance.name} {_run_position(run)}: {e}")
+                unreachable.append(str(e))
+                plex_by_instance[instance.id] = False
+                unreachable_plex.append(plex)
 
-        run.status = 'complete'
+        run.status = 'error' if unreachable else 'complete'
+        run.error_message = '; '.join(unreachable)
         run.finished_at = timezone.now()
         run.save()
     except PlexSyncCancelled:
@@ -576,6 +612,7 @@ def reset_plex_posters(run=None):
 
     summary = f"Plex poster reset: reset={run.stamped} errors={run.errors} status={run.status}"
     last_errors = [f"{plex.name}: {plex.last_error}" for plex in plex_by_instance.values() if plex and plex.last_error]
+    last_errors += [f"{plex.name}: {plex.last_error}" for plex in unreachable_plex]
     if last_errors:
         summary += " | last error: " + "; ".join(last_errors)
     _save_log(1 if not run.errors else 2, summary)
