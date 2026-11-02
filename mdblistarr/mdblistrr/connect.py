@@ -122,7 +122,10 @@ class Connect:
         except RequestException as e:
             return {"error": "request_failed", "exception": str(e), "url": self._redact_url(url)}
 
-    @retry(stop=stop_after_attempt(6), wait=wait_fixed(10))
+    # reraise=True: once retries are exhausted, raise the real error (e.g.
+    # ConnectionError) rather than tenacity's RetryError, so callers'
+    # `except ConnectionError/RequestException` handlers actually match.
+    @retry(stop=stop_after_attempt(6), wait=wait_fixed(10), reraise=True)
     def get(self, url, json=None, headers=None, params=None, cookies=None, timeout=DEFAULT_TIMEOUT):
         if headers is None:
             headers = DEFAULT_HEADERS
@@ -158,13 +161,13 @@ class Connect:
         except RequestException as e:
             return {"error": "Request failed", "exception": str(e)}
 
-    @retry(stop=stop_after_attempt(6), wait=wait_fixed(10))
+    @retry(stop=stop_after_attempt(6), wait=wait_fixed(10), reraise=True)
     def post(self, url, data=None, json=None, headers=None, params=None, cookies=None, timeout=DEFAULT_TIMEOUT):
         if headers is None:
             headers = DEFAULT_HEADERS
         return self.session.post(url, data=data, json=json, params=params, headers=headers, cookies=cookies, timeout=timeout)
 
-    @retry(stop=stop_after_attempt(6), wait=wait_fixed(10))
+    @retry(stop=stop_after_attempt(6), wait=wait_fixed(10), reraise=True)
     def put(self, url, data=None, json=None, headers=None, params=None, cookies=None, timeout=DEFAULT_TIMEOUT):
         if headers is None:
             headers = DEFAULT_HEADERS

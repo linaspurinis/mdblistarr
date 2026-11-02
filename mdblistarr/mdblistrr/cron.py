@@ -416,6 +416,9 @@ def get_mdblist_queue_to_arr():
                     break
 
             # If this is an error/traceback wrapper, stop early and log it.
+            if queue_items is None and queue_resp.get("error") in ("connection_failed", "request_failed"):
+                save_log(provider, 2, f"MDBList queue request failed ({queue_resp.get('url')}): {str(queue_resp.get('exception'))[:1000]}")
+                return {"result": 502, "error": "unexpected_queue_response"}
             if queue_items is None:
                 save_log(provider, 2, f"MDBList queue unexpected response (dict): {str(queue_resp)[:1000]}")
                 return {"result": 502, "error": "unexpected_queue_response"}
